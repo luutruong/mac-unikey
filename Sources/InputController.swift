@@ -5,6 +5,45 @@ import InputMethodKit
 // In-place rewriting via insertText(replacementRange:) proved unreliable: Chromium/Electron
 // apply edits asynchronously and editors like Sublime Text mis-track the range -> dropped or
 // duplicated characters. Marked text is the path every text view supports.
+
+// Chromium/Electron (Chrome, Slack, Claude, VS Code…): a Return that arrives while a word is
+// marked is flagged as composing (keyCode 229), so chat boxes insert a newline instead of
+// sending. There we commit the word, swallow Return and re-post it once the word is plain text.
+// Detected by Chromium's resource pack; cached per bundle id.
+private var chromiumCache: [String: Bool] = [:]
+private func isChromium(_ bundleID: String?) -> Bool {
+    guard let id = bundleID else { return false }
+    if let v = chromiumCache[id] { return v }
+    var v = false
+    if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+        let fw = app.appendingPathComponent("Contents/Frameworks")
+        let items = (try? FileManager.default.contentsOfDirectory(atPath: fw.path)) ?? []
+        v = items.contains { FileManager.default.fileExists(atPath: fw.appendingPathComponent("\($0)/Resources/chrome_100_percent.pak").path) }
+    }
+    chromiumCache[id] = v
+    return v
+}
+
+// Re-posting keys needs the Accessibility permission; ask macOS once per launch.
+// Without it, the first Return only commits the word and a second Return sends.
+private var askedPostAccess = false
+private func repost(_ event: NSEvent, to bundleID: String) {
+    guard CGPreflightPostEventAccess() else {
+        if !askedPostAccess { askedPostAccess = true; _ = CGRequestPostEventAccess() }
+        return
+    }
+    let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+    guard let pid = (apps.first { $0.isActive } ?? apps.first)?.processIdentifier else { return }
+    let flags = CGEventFlags(rawValue: UInt64(event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue))
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { // let the app apply the commit first
+        for down in [true, false] {
+            let e = CGEvent(keyboardEventSource: nil, virtualKey: event.keyCode, keyDown: down)
+            e?.flags = flags
+            e?.postToPid(pid)
+        }
+    }
+}
+
 @objc(InputController)
 class InputController: IMKInputController {
     private var raw = ""
@@ -20,6 +59,10 @@ class InputController: IMKInputController {
         guard event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
         if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             commit(client); return false
+        }
+        if (event.keyCode == 36 || event.keyCode == 76), !raw.isEmpty, // Return / keypad Enter
+           let id = client.bundleIdentifier(), isChromium(id) {
+            commit(client); repost(event, to: id); return true
         }
         if event.keyCode == 51 { // backspace
             guard !raw.isEmpty else { return false }
