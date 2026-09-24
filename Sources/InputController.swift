@@ -6,10 +6,10 @@ import InputMethodKit
 // apply edits asynchronously and editors like Sublime Text mis-track the range -> dropped or
 // duplicated characters. Marked text is the path every text view supports.
 
-// Chromium/Electron (Chrome, Slack, Claude, VS Code…): a Return that arrives while a word is
-// marked is flagged as composing (keyCode 229), so chat boxes insert a newline instead of
-// sending. There we commit the word, swallow Return and re-post it once the word is plain text.
-// Detected by Chromium's resource pack; cached per bundle id.
+// A Return that arrives while a word is marked is treated as part of the composition by many
+// chat boxes (Chromium/Electron flag it keyCode 229; native Telegram too) -> newline, not send.
+// So Return commits the word, is swallowed and re-posted once the word is plain text.
+// Chromium is detected by its resource pack (cached per bundle id) for the no-permission fallback.
 private var chromiumCache: [String: Bool] = [:]
 private func isChromium(_ bundleID: String?) -> Bool {
     guard let id = bundleID else { return false }
@@ -25,15 +25,15 @@ private func isChromium(_ bundleID: String?) -> Bool {
 }
 
 // Re-posting keys needs the Accessibility permission; ask macOS once per launch.
-// Without it, the first Return only commits the word and a second Return sends.
+// Returns false when it can't post (no permission / app not found).
 private var askedPostAccess = false
-private func repost(_ event: NSEvent, to bundleID: String) {
+private func repost(_ event: NSEvent, to bundleID: String) -> Bool {
     guard CGPreflightPostEventAccess() else {
         if !askedPostAccess { askedPostAccess = true; _ = CGRequestPostEventAccess() }
-        return
+        return false
     }
     let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-    guard let pid = (apps.first { $0.isActive } ?? apps.first)?.processIdentifier else { return }
+    guard let pid = (apps.first { $0.isActive } ?? apps.first)?.processIdentifier else { return false }
     let flags = CGEventFlags(rawValue: UInt64(event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue))
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { // let the app apply the commit first
         for down in [true, false] {
@@ -42,6 +42,7 @@ private func repost(_ event: NSEvent, to bundleID: String) {
             e?.postToPid(pid)
         }
     }
+    return true
 }
 
 @objc(InputController)
@@ -61,8 +62,11 @@ class InputController: IMKInputController {
             commit(client); return false
         }
         if (event.keyCode == 36 || event.keyCode == 76), !raw.isEmpty, // Return / keypad Enter
-           let id = client.bundleIdentifier(), isChromium(id) {
-            commit(client); repost(event, to: id); return true
+           let id = client.bundleIdentifier() {
+            commit(client)
+            if repost(event, to: id) { return true }
+            // No permission: Chromium swallows it (a 2nd Return sends); native apps get it now.
+            return isChromium(id)
         }
         if event.keyCode == 51 { // backspace
             guard !raw.isEmpty else { return false }
