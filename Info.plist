@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.luutruong.inputmethod.MacUnikey</string>
+	<key>CFBundleName</key>
+	<string>Gõ tiếng Việt</string>
+	<key>CFBundleDisplayName</key>
+	<string>Gõ tiếng Việt</string>
+	<key>CFBundleExecutable</key>
+	<string>MacUnikey</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSBackgroundOnly</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>InputMethodConnectionName</key>
+	<string>MacUnikey_Connection</string>
+	<key>InputMethodServerControllerClass</key>
+	<string>InputController</string>
+	<key>InputMethodServerDelegateClass</key>
+	<string>InputController</string>
+	<key>TISInputSourceID</key>
+	<string>com.luutruong.inputmethod.MacUnikey</string>
+	<key>TISIntendedLanguage</key>
+	<string>vi</string>
+	<key>tsInputMethodCharacterRepertoireKey</key>
+	<array>
+		<string>Latn</string>
+	</array>
+	<key>tsInputMethodIconFileKey</key>
+	<string>icon.tiff</string>
+	<key>TISIconIsTemplate</key>
+	<true/>
+</dict>
+</plist>
