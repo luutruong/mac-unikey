@@ -12,15 +12,17 @@ let cases: [(String, Method, String)] = [
     ("vie6t5", .vni, "việt"), ("d9i", .vni, "đi"), ("nguo72i", .vni, "người"),
     // spell check: English words stay as typed
     ("book", .telex, "book"), ("coffee", .telex, "coffee"), ("windows", .telex, "windows"),
-    ("tesst", .telex, "tesst"), ("test", .telex, "tét"), ("banana", .telex, "banana"), ("google", .telex, "google"),
-    ("hello", .telex, "hello"), ("matf", .telex, "matf"), ("mats", .telex, "mát"),
+    ("Text", .telex, "Text"), ("message", .telex, "message"), ("class", .telex, "class"), ("test", .telex, "tét"), ("banana", .telex, "banana"), ("google", .telex, "google"),
+    ("hello", .telex, "hello"), ("generated", .telex, "generated"), ("matf", .telex, "matf"), ("mats", .telex, "mát"),
     ("a88", .vni, "a88"), ("thuowr", .telex, "thuở"), ("huow", .telex, "huơ"),
     ("thuowngf", .telex, "thường"), ("gieengs", .telex, "giếng"), ("quys", .telex, "quý"), ("hoa8c5", .vni, "hoặc"), ("to6i", .vni, "tôi"),
 ]
 
 // While typing (compose): transforms shown even if the word isn't Vietnamese yet
 let live: [(String, Method, String)] = [
-    ("book", .telex, "bôk"), ("vieetj", .telex, "việt"), ("tesst", .telex, "test"), ("asss", .telex, "ass"), ("ass", .telex, "as"),
+    ("book", .telex, "book"), ("boo", .telex, "bô"), ("vieetj", .telex, "việt"), ("tiengs", .telex, "tiéng"),
+    ("Tex", .telex, "Tẽ"), ("Text", .telex, "Text"), ("genera", .telex, "genera"), ("mess", .telex, "mess"),
+    ("coffe", .telex, "coffe"), ("ngu", .telex, "ngu"), ("dduwow", .telex, "đuơ"), ("dduwowc", .telex, "đươc"),
 ]
 
 var fail = 0

@@ -54,31 +54,40 @@ private func vowelIndices(_ w: [Ch]) -> [Int] {
     return r
 }
 
-/// Live display while typing (UniKey shows the transformed form even for non-Vietnamese words).
-func compose(_ raw: String, method: Method) -> String { render(parse(raw, method)) }
+/// Live display while typing: as soon as the word can no longer become Vietnamese, show the
+/// keys exactly as typed ("bôk" -> "book", "gểna" -> "genera"), so nothing needs undoing.
+func compose(_ raw: String, method: Method) -> String {
+    let p = parse(raw, method)
+    return isSyllable(p.w, tone: p.tone, prefix: true) ? render(p) : raw
+}
 
-/// Word end (Space…): a transformed word that isn't a Vietnamese syllable goes back to the
-/// original keystrokes, like UniKey's auto-restore ("bôk" -> "book", "cofê" -> "coffee").
+/// Word end (Space…): anything that isn't a complete Vietnamese syllable stays as typed.
 func finish(_ raw: String, method: Method) -> String {
     let p = parse(raw, method)
-    let out = render(p)
-    return out != raw && !isSyllable(p.w, tone: p.tone) ? raw : out
+    return isSyllable(p.w, tone: p.tone) ? render(p) : raw
 }
 
 private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
     var w: [Ch] = []
     var tone = 0 // 1 sắc, 2 huyền, 3 hỏi, 4 ngã, 5 nặng
-    var undone: Set<Character> = [] // keys undone by double-typing stay literal ("asss" -> "ass")
+    var literal = false // after a double-key undo the rest of the word is typed as-is (UniKey)
+    var prev: (key: Character, applied: Bool)? // undo only when the key repeats right away ("ss")
 
     for key in raw {
         let k = Character(key.lowercased())
         let lit = Ch(base: k, upper: key.isUppercase)
-        guard !undone.contains(k), let act = action(k, method) else { w.append(lit); continue }
+        let canUndo = prev?.key == k && prev?.applied == true
+        var applied = false
+        defer { prev = (k, applied) }
+        guard !literal, let act = action(k, method) else { w.append(lit); continue }
         let vi = vowelIndices(w)
 
-        // Set `mark` on index i; typing the same mark twice undoes it and emits the key.
+        // Set `mark` on index i. Repeating the key right away undoes it and emits the key;
+        // a later repeat ("banana") is just a letter.
         func toggle(_ i: Int, _ mark: Mark) {
-            if w[i].mark == mark { w[i].mark = .none; w.append(lit); undone.insert(k) } else { w[i].mark = mark }
+            if w[i].mark != mark { w[i].mark = mark; applied = true; return }
+            if canUndo { w[i].mark = .none; literal = true }
+            w.append(lit)
         }
         // Horn on "uo" pair -> "ươ"; returns false if there is no such pair.
         func hornPair() -> Bool {
@@ -86,16 +95,19 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
                   w[vi[p + 1]].base == "o", vi[p + 1] == vi[p] + 1 else { return false }
             let (u, o) = (vi[p], vi[p + 1])
             if w[u].mark == .horn && w[o].mark == .horn {
-                w[u].mark = .none; w[o].mark = .none; w.append(lit); undone.insert(k)
-            } else { w[u].mark = .horn; w[o].mark = .horn }
+                if canUndo { w[u].mark = .none; w[o].mark = .none; literal = true }
+                w.append(lit)
+            } else { w[u].mark = .horn; w[o].mark = .horn; applied = true }
             return true
         }
 
         switch act {
         case .tone(let t):
             if vi.isEmpty || (t == 0 && tone == 0) { w.append(lit) }
-            else if t == tone && t != 0 { tone = 0; w.append(lit); undone.insert(k) }
-            else { tone = t }
+            else if t == tone && t != 0 {
+                if canUndo { tone = 0; literal = true }
+                w.append(lit)
+            } else { tone = t; applied = true }
         case .hat(let targets):
             if let i = vi.last(where: { targets.contains(w[$0].base) }) { toggle(i, .hat) } else { w.append(lit) }
         case .breve:
@@ -104,12 +116,12 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
             if hornPair() { break }
             if let i = vi.last(where: { "ou".contains(w[$0].base) }) { toggle(i, .horn) } else { w.append(lit) }
         case .w:
-            if let i = w.indices.last, w[i].fromW { w[i] = lit; undone.insert(k); break } // "ww" -> "w"
+            if canUndo, let i = w.indices.last, w[i].fromW { w[i] = lit; literal = true; break } // "ww" -> "w"
             if hornPair() { break }
             if let i = vi.last(where: { "aou".contains(w[$0].base) }) {
                 toggle(i, w[i].base == "a" ? .breve : .horn)
             } else if vi.isEmpty {
-                w.append(Ch(base: "u", mark: .horn, upper: lit.upper, fromW: true))
+                w.append(Ch(base: "u", mark: .horn, upper: lit.upper, fromW: true)); applied = true
             } else { w.append(lit) }
         case .stroke:
             if let f = w.first, f.base == "d" { toggle(0, .stroke) } else { w.append(lit) }
@@ -144,12 +156,30 @@ private let openVowels: Set<String> = ["ai", "ao", "au", "ay", "âu", "ây", "eo
 private let finals: Set<String> = ["c", "ch", "m", "n", "ng", "nh", "p", "t"]
 private let vowelGlyphs = Set("aăâeêioôơuưy")
 
-private func isSyllable(_ w: [Ch], tone: Int) -> Bool {
+// Marks ignored for prefix checks: "tieng" may still become "tiêng".
+private func strip(_ s: String) -> String {
+    String(s.map { ["ă": "a", "â": "a", "ê": "e", "ô": "o", "ơ": "o", "ư": "u", "đ": "d"][$0] ?? $0 })
+}
+private func prefixes(_ set: Set<String>) -> Set<String> {
+    Set(set.flatMap { s in (0...s.count).map { strip(String(s.prefix($0))) } })
+}
+private let vowelPrefixes = prefixes(closedVowels.union(openVowels))
+private let finalPrefixes = prefixes(finals)
+
+/// prefix: true -> could more letters still turn `w` into a syllable?
+private func isSyllable(_ w: [Ch], tone: Int, prefix: Bool = false) -> Bool {
     let s = w.map { glyph(Ch(base: $0.base, mark: $0.mark, upper: false), tone: 0) }.joined()
     for ini in initials where s.hasPrefix(ini) {
         let rest = s.dropFirst(ini.count)
         let v = String(rest.prefix { vowelGlyphs.contains($0) })
         let fin = String(rest.dropFirst(v.count))
+        if prefix {
+            let stopOK = !(fin.hasPrefix("c") || fin.hasPrefix("p") || fin.hasPrefix("t")) || [0, 1, 5].contains(tone)
+            if v.isEmpty ? fin.isEmpty : vowelPrefixes.contains(strip(v)) && finalPrefixes.contains(fin) && stopOK {
+                return true
+            }
+            continue
+        }
         if fin.isEmpty ? (closedVowels.contains(v) || openVowels.contains(v))
                        : (closedVowels.contains(v) && finals.contains(fin)
                           && (!["c", "ch", "p", "t"].contains(fin) || tone == 0 || tone == 1 || tone == 5)) {
