@@ -8,6 +8,7 @@ import InputMethodKit
 @objc(InputController)
 class InputController: IMKInputController {
     private var raw = ""
+    private var literal = false // word can't be Vietnamese any more: show/commit keys as typed
     private let noRange = NSRange(location: NSNotFound, length: 0)
 
     private var method: Method {
@@ -22,17 +23,20 @@ class InputController: IMKInputController {
         }
         if event.keyCode == 51 { // backspace
             guard !raw.isEmpty else { return false }
-            raw.removeLast(); update(client); return true
+            (raw, literal) = backspace(raw, literal: literal, method: method)
+            update(client); return true
         }
         guard let s = event.characters, s.count == 1, let c = s.first, c.isASCII,
               c.isLetter || (method == .vni && c.isNumber && !raw.isEmpty) else {
             commit(client); return false // space, punctuation, enter, arrows… end the word
         }
-        raw.append(c); update(client); return true
+        raw.append(c)
+        if !literal && isLiteral(raw, method: method) { literal = true } // sticky until word end
+        update(client); return true
     }
 
     private func update(_ client: IMKTextInput) {
-        let s = compose(raw, method: method)
+        let s = literal ? raw : compose(raw, method: method)
         // Thin underline only: a plain string lets some apps paint it like a selection.
         let marked = NSAttributedString(string: s, attributes: [.underlineStyle: NSUnderlineStyle.single.rawValue])
         client.setMarkedText(marked, selectionRange: NSRange(location: s.utf16.count, length: 0), replacementRange: noRange)
@@ -41,8 +45,8 @@ class InputController: IMKInputController {
     // Word end: auto-restore non-Vietnamese words to the typed keys (UniKey "gõ thông minh").
     private func commit(_ client: IMKTextInput) {
         guard !raw.isEmpty else { return }
-        client.insertText(finish(raw, method: method), replacementRange: noRange)
-        raw = ""
+        client.insertText(literal ? raw : finish(raw, method: method), replacementRange: noRange)
+        raw = ""; literal = false
     }
 
     override func commitComposition(_ sender: Any!) {

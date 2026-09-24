@@ -31,5 +31,24 @@ func check(_ input: String, _ got: String, _ want: String) {
 }
 for (input, m, want) in cases { check(input, finish(input, method: m), want) }
 for (input, m, want) in live { check(input, compose(input, method: m), want) }
-print(fail == 0 ? "OK \(cases.count + live.count) cases" : "\(fail) failed")
+
+// Simulates the controller: type `input`, press Delete `n` times, return what's shown.
+func typeThenDelete(_ input: String, _ n: Int, _ m: Method) -> String {
+    var raw = "", literal = false
+    for c in input { raw.append(c); if !literal && isLiteral(raw, method: m) { literal = true } }
+    for _ in 0..<n { (raw, literal) = backspace(raw, literal: literal, method: m) }
+    return literal ? raw : compose(raw, method: m)
+}
+let deletes: [(String, Int, Method, String)] = [
+    ("depends", 1, .telex, "depend"), ("depends", 3, .telex, "depe"), ("depends", 4, .telex, "dep"),
+    ("vieetj", 1, .telex, "việ"), ("nguowif", 1, .telex, "ngườ"), ("hoanf", 1, .telex, "hoà"),
+    ("vie6t5", 1, .vni, "việ"), ("book", 1, .telex, "boo"), ("tieengs", 7, .telex, ""),
+]
+for (input, n, m, want) in deletes { check("\(input) ⌫\(n)", typeThenDelete(input, n, m), want) }
+// keys(for:) round-trips, so typing continues naturally after Delete ("việ" + "t" -> "việt")
+for word in ["việt", "người", "được", "tiếng", "khuỷu", "quả", "giếng", "Đi", "hoặc", "thuở", "Việt"] {
+    for m in [Method.telex, .vni] { check("keys(\(word))", compose(keys(for: word, method: m), method: m), word) }
+}
+check("việ⌫+t", compose(keys(for: "việ", method: .telex) + "t", method: .telex), "việt")
+print(fail == 0 ? "OK all cases" : "\(fail) failed")
 exit(fail == 0 ? 0 : 1)

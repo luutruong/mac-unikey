@@ -67,6 +67,45 @@ func finish(_ raw: String, method: Method) -> String {
     return isSyllable(p.w, tone: p.tone) ? render(p) : raw
 }
 
+/// The word can no longer become Vietnamese: it is shown and committed exactly as typed.
+func isLiteral(_ raw: String, method: Method) -> Bool {
+    let p = parse(raw, method)
+    return !isSyllable(p.w, tone: p.tone, prefix: true)
+}
+
+/// Delete removes the last *visible* character, like UniKey ("việt" -> "việ", not "viêt").
+/// A literal (non-Vietnamese) word just loses its last key and stays literal ("depe" not "dêp").
+func backspace(_ raw: String, literal: Bool, method: Method) -> (raw: String, literal: Bool) {
+    if literal { let r = String(raw.dropLast()); return (r, !r.isEmpty) }
+    let shown = String(compose(raw, method: method).dropLast())
+    if shown.isEmpty { return ("", false) }
+    let k = keys(for: shown, method: method)
+    // Re-typing may place the tone elsewhere ("hoà" -> "hòa"); then keep the text as is.
+    return compose(k, method: method) == shown ? (k, false) : (shown, true)
+}
+
+/// Keystrokes that compose back into `text` (tone key last): "việ" -> "vieej" / "vie65".
+func keys(for text: String, method: Method) -> String {
+    var out = "", tone = 0
+    for ch in text {
+        guard let (base, mark, t) = reverseTable[Character(ch.lowercased())] else { out.append(ch); continue }
+        if t != 0 { tone = t }
+        out.append(ch.isUppercase ? Character(base.uppercased()) : base)
+        switch (mark, method) {
+        case ("^", .telex): out.append(base)
+        case ("(", .telex), ("+", .telex): out.append("w")
+        case ("d", .telex): out.append("d")
+        case ("^", .vni): out.append("6")
+        case ("+", .vni): out.append("7")
+        case ("(", .vni): out.append("8")
+        case ("d", .vni): out.append("9")
+        default: break
+        }
+    }
+    if tone != 0 { out.append(method == .telex ? Array("sfrxj")[tone - 1] : Character(String(tone))) }
+    return out
+}
+
 private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
     var w: [Ch] = []
     var tone = 0 // 1 sắc, 2 huyền, 3 hỏi, 4 ngã, 5 nặng
@@ -197,6 +236,13 @@ private let table: [String: [Character]] = [
     "u": Array("uúùủũụ"), "u+": Array("ưứừửữự"),
     "y": Array("yýỳỷỹỵ"),
 ]
+
+// Glyph -> (base letter, mark suffix as in `table`, tone); "d" marks đ.
+private let reverseTable: [Character: (Character, String, Int)] = {
+    var r: [Character: (Character, String, Int)] = ["đ": ("d", "d", 0)]
+    for (k, chars) in table { for (t, c) in chars.enumerated() { r[c] = (k.first!, String(k.dropFirst()), t) } }
+    return r
+}()
 
 private func glyph(_ c: Ch, tone: Int) -> String {
     var s: String
