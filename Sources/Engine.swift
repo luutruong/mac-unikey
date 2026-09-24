@@ -67,6 +67,16 @@ func finish(_ raw: String, method: Method) -> String {
     return isSyllable(p.w, tone: p.tone) ? render(p) : raw
 }
 
+/// The typed keys minus the key that cancelled a mark by double-typing — what the user meant
+/// when they undid an accent on an English word ("itss" -> "its", "generrated" -> "generated").
+/// nil when no mark was cancelled.
+func withoutUndoKey(_ raw: String, method: Method) -> String? {
+    guard let i = parse(raw, method).undoAt else { return nil }
+    var keys = Array(raw)
+    keys.remove(at: i)
+    return String(keys)
+}
+
 /// The word can no longer become Vietnamese: it is shown and committed exactly as typed.
 func isLiteral(_ raw: String, method: Method) -> Bool {
     let p = parse(raw, method)
@@ -106,13 +116,16 @@ func keys(for text: String, method: Method) -> String {
     return out
 }
 
-private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
+private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int, undoAt: Int?) {
     var w: [Ch] = []
     var tone = 0 // 1 sắc, 2 huyền, 3 hỏi, 4 ngã, 5 nặng
     var literal = false // after a double-key undo the rest of the word is typed as-is (UniKey)
     var prev: (key: Character, applied: Bool)? // undo only when the key repeats right away ("ss")
+    var undoAt: Int?  // index in raw of the key that cancelled a mark
+    var idx = -1
 
     for key in raw {
+        idx += 1
         let k = Character(key.lowercased())
         let lit = Ch(base: k, upper: key.isUppercase)
         let canUndo = prev?.key == k && prev?.applied == true
@@ -120,12 +133,21 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
         defer { prev = (k, applied) }
         guard !literal, let act = action(k, method) else { w.append(lit); continue }
         let vi = vowelIndices(w)
+        // A transform that breaks the syllable while the plain letter wouldn't is typed as the plain
+        // letter instead (UniKey): "khoeo" keeps its o, not "khôe".
+        let before = (w, tone)
+        defer {
+            if applied, !isSyllable(w, tone: tone, prefix: true),
+               isSyllable(before.0 + [lit], tone: before.1, prefix: true) {
+                (w, tone) = before; w.append(lit); applied = false
+            }
+        }
 
         // Set `mark` on index i. Repeating the key right away undoes it and emits the key;
         // a later repeat ("banana") is just a letter.
         func toggle(_ i: Int, _ mark: Mark) {
             if w[i].mark != mark { w[i].mark = mark; applied = true; return }
-            if canUndo { w[i].mark = .none; literal = true }
+            if canUndo { w[i].mark = .none; literal = true; undoAt = undoAt ?? idx }
             w.append(lit)
         }
         // Horn on "uo" pair -> "ươ"; returns false if there is no such pair.
@@ -134,7 +156,7 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
                   w[vi[p + 1]].base == "o", vi[p + 1] == vi[p] + 1 else { return false }
             let (u, o) = (vi[p], vi[p + 1])
             if w[u].mark == .horn && w[o].mark == .horn {
-                if canUndo { w[u].mark = .none; w[o].mark = .none; literal = true }
+                if canUndo { w[u].mark = .none; w[o].mark = .none; literal = true; undoAt = undoAt ?? idx }
                 w.append(lit)
             } else { w[u].mark = .horn; w[o].mark = .horn; applied = true }
             return true
@@ -144,7 +166,7 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
         case .tone(let t):
             if vi.isEmpty || (t == 0 && tone == 0) { w.append(lit) }
             else if t == tone && t != 0 {
-                if canUndo { tone = 0; literal = true }
+                if canUndo { tone = 0; literal = true; undoAt = undoAt ?? idx }
                 w.append(lit)
             } else { tone = t; applied = true }
         case .hat(let targets):
@@ -155,7 +177,7 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
             if hornPair() { break }
             if let i = vi.last(where: { "ou".contains(w[$0].base) }) { toggle(i, .horn) } else { w.append(lit) }
         case .w:
-            if canUndo, let i = w.indices.last, w[i].fromW { w[i] = lit; literal = true; break } // "ww" -> "w"
+            if canUndo, let i = w.indices.last, w[i].fromW { w[i] = lit; literal = true; undoAt = undoAt ?? idx; break } // "ww" -> "w"
             if hornPair() { break }
             if let i = vi.last(where: { "aou".contains(w[$0].base) }) {
                 toggle(i, w[i].base == "a" ? .breve : .horn)
@@ -166,14 +188,18 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
             if let f = w.first, f.base == "d" { toggle(0, .stroke) } else { w.append(lit) }
         }
     }
+    // "ưo" followed by anything is always "ươ" (UniKey): "dduwocj" -> "được".
+    for i in w.indices.dropLast(2) where w[i].base == "u" && w[i].mark == .horn && w[i + 1].base == "o" && w[i + 1].mark == .none {
+        w[i + 1].mark = .horn
+    }
     // "ươ" never ends a Vietnamese syllable: word-final it is "uơ" (thuở, huơ).
     if w.count >= 2, w[w.count - 1].base == "o", w[w.count - 1].mark == .horn,
        w[w.count - 2].base == "u", w[w.count - 2].mark == .horn { w[w.count - 2].mark = .none }
-    return (w, tone)
+    return (w, tone, undoAt)
 }
 
-private func render(_ p: (w: [Ch], tone: Int)) -> String {
-    let (w, tone) = p
+private func render(_ p: (w: [Ch], tone: Int, undoAt: Int?)) -> String {
+    let (w, tone, _) = p
     // Tone placement (old style, UniKey default).
     var pos: Int?
     let vi = vowelIndices(w)
@@ -202,19 +228,28 @@ private func strip(_ s: String) -> String {
 private func prefixes(_ set: Set<String>) -> Set<String> {
     Set(set.flatMap { s in (0...s.count).map { strip(String(s.prefix($0))) } })
 }
-private let vowelPrefixes = prefixes(closedVowels.union(openVowels))
+private let allVowels = Array(closedVowels.union(openVowels)).map(Array.init)
+// A half-typed vowel group can still grow into a real one: same letters, and every mark already
+// typed matches ("tie" -> "tiê" ok, "ôe" -> nothing).
+private func vowelPrefixOK(_ v: String) -> Bool {
+    let v = Array(v)
+    return allVowels.contains { c in
+        c.count >= v.count && zip(v, c).allSatisfy { a, b in strip(String(a)) == strip(String(b)) && (a == b || strip(String(a)) == String(a)) }
+    }
+}
 private let finalPrefixes = prefixes(finals)
 
 /// prefix: true -> could more letters still turn `w` into a syllable?
 private func isSyllable(_ w: [Ch], tone: Int, prefix: Bool = false) -> Bool {
     let s = w.map { glyph(Ch(base: $0.base, mark: $0.mark, upper: false), tone: 0) }.joined()
+    if prefix && initials.contains(where: { $0.hasPrefix(s) }) { return true } // "q" -> "qu", "ng" -> "ngh"
     for ini in initials where s.hasPrefix(ini) {
         let rest = s.dropFirst(ini.count)
         let v = String(rest.prefix { vowelGlyphs.contains($0) })
         let fin = String(rest.dropFirst(v.count))
         if prefix {
             let stopOK = !(fin.hasPrefix("c") || fin.hasPrefix("p") || fin.hasPrefix("t")) || [0, 1, 5].contains(tone)
-            if v.isEmpty ? fin.isEmpty : vowelPrefixes.contains(strip(v)) && finalPrefixes.contains(fin) && stopOK {
+            if v.isEmpty ? fin.isEmpty : vowelPrefixOK(v) && finalPrefixes.contains(fin) && stopOK {
                 return true
             }
             continue
@@ -236,6 +271,51 @@ private let table: [String: [Character]] = [
     "u": Array("uúùủũụ"), "u+": Array("ưứừửữự"),
     "y": Array("yýỳỷỹỵ"),
 ]
+
+/// `s` with its tone mark moved to each vowel: both placement styles (hòa / hoà, khụy / khuỵ).
+func toneVariants(_ s: String) -> [String] {
+    let chars = Array(s)
+    guard let (i, t) = chars.enumerated().lazy.compactMap({ i, c -> (Int, Int)? in
+        guard let (_, _, t) = reverseTable[Character(c.lowercased())], t != 0 else { return nil }
+        return (i, t)
+    }).first else { return [s] }
+    func toned(_ c: Character, _ t: Int) -> Character? {
+        let lower = Character(c.lowercased())
+        guard let (base, mark, _) = reverseTable[lower], let row = table["\(base)\(mark)"] else { return nil }
+        return c.isUppercase ? Character(row[t].uppercased()) : row[t]
+    }
+    var out = [s]
+    for j in chars.indices where j != i {
+        guard let moved = toned(chars[j], t), let plain = toned(chars[i], 0) else { continue }
+        var cs = chars
+        cs[i] = plain; cs[j] = moved
+        out.append(String(cs))
+    }
+    return out
+}
+
+/// Every initial + vowel cluster + final, with each tone on each vowel of the cluster: a superset
+/// of real syllables in both tone-placement styles (hòa / hoà). Used by the corpus tests.
+func candidateSyllables() -> [String] {
+    var out: [String] = []
+    for ini in initials {
+        for v in closedVowels.union(openVowels) {
+            let vs = Array(v)
+            for fin in openVowels.contains(v) ? [""] : [""] + finals.sorted() {
+                out.append(ini + v + fin)
+                for t in 1...5 {
+                    for pos in vs.indices {
+                        guard let (base, mark, _) = reverseTable[vs[pos]], let row = table["\(base)\(mark)"] else { continue }
+                        var cl = vs
+                        cl[pos] = row[t]
+                        out.append(ini + String(cl) + fin)
+                    }
+                }
+            }
+        }
+    }
+    return out
+}
 
 // Glyph -> (base letter, mark suffix as in `table`, tone); "d" marks đ.
 private let reverseTable: [Character: (Character, String, Int)] = {
