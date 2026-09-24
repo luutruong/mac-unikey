@@ -24,6 +24,8 @@ struct Word {
     ///    …unless U is English too and only U is in the plain word list: the spell checker also
     ///    accepts stretched forms, so "mixx" -> "mix", "errr" -> "err", but "pass" stays
     /// 3. U is an English word                             -> U (itss -> its, generrated -> generated)
+    ///    — while typing only right after the cancelling key, otherwise the text would flip as
+    ///    each prefix happens (not) to be English ("mess" -> "mesa" -> "messag")
     /// 4. while typing: V (half-typed Vietnamese like "tiê" isn't a word yet)
     ///    at word end: not a real Vietnamese word, so U if a mark was cancelled, else R
     ///    ("bara" not "bẩ", "tesst" -> "test", "json")
@@ -32,10 +34,13 @@ struct Word {
         let u = withoutUndoKey(raw, method: m)
         let uEnglish = u.map { $0.count >= 2 && Dictionaries.isEnglish($0) } ?? false
         if raw.count >= 3 && Dictionaries.isEnglish(raw) {
+            // While typing, keep the Vietnamese form as long as it can still become a real word:
+            // "naw" is English but "nă" is on its way to "năm" — flashing "naw" makes text shake.
+            if !final, v != raw, Dictionaries.canBecomeVietnamese(v) { return v }
             if let u, uEnglish, !Dictionaries.inWordList(raw), Dictionaries.inWordList(u) { return u }
             return raw
         }
-        if let u, uEnglish { return u }
+        if let u, uEnglish, final || undoKeyIndex(raw, method: m) == raw.count - 1 { return u }
         return final ? (u ?? raw) : v
     }
 }
@@ -51,6 +56,29 @@ enum Dictionaries {
     static func isEnglish(_ w: String) -> Bool {
         w.allSatisfy { $0.isASCII && $0.isLetter } && lookup(w, "en")
     }
+
+    /// Every real Vietnamese syllable (from the vi dictionary, generated at build time into the app's
+    /// Resources/vietnamese.txt; `MacUnikey --syllables` prints it), plus every beginning of one,
+    /// with and without its tone. Answers "can this half-typed word still become Vietnamese?".
+    private static let vietnamesePrefixes: Set<String> = {
+        let file = Bundle.main.url(forResource: "vietnamese", withExtension: "txt")
+            ?? URL(fileURLWithPath: "build/vietnamese.txt")
+        let list = (try? String(contentsOf: file, encoding: .utf8)).map { $0.split(separator: "\n").map(String.init) }
+            ?? realSyllables()
+        var out = Set<String>()
+        for s in list {
+            for form in [s, withoutTone(s)] {
+                for n in 1...form.count { out.insert(String(form.prefix(n))) }
+            }
+        }
+        return out
+    }()
+    static func canBecomeVietnamese(_ w: String) -> Bool {
+        let w = w.lowercased()
+        return vietnamesePrefixes.contains(w) || vietnamesePrefixes.contains(withoutTone(w))
+    }
+    /// Slow (~10 s): checks every candidate syllable against the vi dictionary.
+    static func realSyllables() -> [String] { candidateSyllables().filter { isVietnamese($0) } }
 
     /// /usr/share/dict/words: old and without inflections ("seems"), so only a tie-breaker.
     private static let wordList: Set<Substring> = {

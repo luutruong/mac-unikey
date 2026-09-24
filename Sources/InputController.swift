@@ -81,9 +81,20 @@ private func showHUD(_ text: String, near client: IMKTextInput) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { if t == hudToken { panel.orderOut(nil) } }
 }
 
+private var loggedFontApps = Set<String>() // log the marked-text font once per app (debugging)
+private var loggedModeApps = Set<String>()
+
 @objc(InputController)
 class InputController: IMKInputController {
     private var word = Word() // the word being typed; all typing decisions live in Word.swift
+    private var markedStyle: [NSAttributedString.Key: Any]? // per word, see markedAttributes
+    // Direct mode (native apps like Telegram, TextEdit): the word is typed straight into the text
+    // and rewritten in place, with no marked text — marked text gets redrawn in another font there
+    // (Telegram reports no font), so the line shakes. `start`/`shown` = where the word sits.
+    // Chromium/Electron apps apply edits asynchronously, so they keep marked text (start = NSNotFound).
+    private var start = NSNotFound
+    private var shown = 0
+    private var shownText = "" // what direct mode last put in the document
     private let noRange = NSRange(location: NSNotFound, length: 0)
     private var chordArmed = false // Ctrl+Shift pressed with no other key yet
 
@@ -114,13 +125,15 @@ class InputController: IMKInputController {
         guard event.type == .keyDown else { return false }
         chordArmed = false
         guard vietnamese else { return false }
+        // Direct mode: the cursor moved (click, other edit) since our last change -> forget the word.
+        if !word.isEmpty, start != NSNotFound, client.selectedRange().location != start + shown { reset() }
         if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             commit(client); return false
         }
         if event.keyCode == 36 || event.keyCode == 76, word.isEmpty { // Return with no word: passes through
             log.notice("Return passthrough in \(client.bundleIdentifier() ?? "?", privacy: .public)")
         }
-        if (event.keyCode == 36 || event.keyCode == 76), !word.isEmpty, // Return / keypad Enter
+        if (event.keyCode == 36 || event.keyCode == 76), !word.isEmpty, start == NSNotFound, // Return on marked text
            let id = client.bundleIdentifier() {
             commit(client)
             let posted = repost(event, to: id)
@@ -132,28 +145,88 @@ class InputController: IMKInputController {
         if event.keyCode == 51 { // backspace
             guard !word.isEmpty else { return false }
             word.delete(method)
-            update(client); return true
+            update(client)
+            if word.isEmpty { reset() }
+            return true
         }
         guard let s = event.characters, s.count == 1, let c = s.first, c.isASCII,
               c.isLetter || (method == .vni && c.isNumber && !word.isEmpty) else {
             commit(client); return false // space, punctuation, enter, arrows… end the word
         }
+        if word.isEmpty { begin(client) }
         word.type(c, method)
         update(client); return true
     }
 
+    // First key of a word: pick direct or marked mode for this app.
+    private func begin(_ client: IMKTextInput) {
+        let id = client.bundleIdentifier()
+        let sel = isChromium(id) ? noRange : client.selectedRange()
+        start = sel.location
+        shown = sel.location == NSNotFound ? 0 : sel.length // typing replaces a selection
+        if let id, loggedModeApps.insert(id).inserted {
+            log.notice("mode in \(id, privacy: .public): \(self.start == NSNotFound ? "marked" : "direct", privacy: .public)")
+        }
+    }
+
+    private func reset() { word = Word(); markedStyle = nil; start = NSNotFound; shown = 0; shownText = "" }
+
+    // Direct mode: send only what changed, not the whole word. Most keys just add a letter
+    // ("trướ" -> "trước" inserts "c"); rewriting the word on every key makes apps like Telegram
+    // re-process it each time and typing feels slow.
+    private func replaceShown(with s: String, _ client: IMKTextInput) {
+        guard s != shownText else { return }
+        let same = zip(shownText, s).prefix { $0 == $1 }.count
+        let keep = String(shownText.prefix(same)).utf16.count
+        client.insertText(String(s.dropFirst(same)), replacementRange: NSRange(location: start + keep, length: shown - keep))
+        shownText = s
+        shown = s.utf16.count
+    }
+
     private func update(_ client: IMKTextInput) {
         let s = word.display(method)
-        // Thin underline only: a plain string lets some apps paint it like a selection.
-        let marked = NSAttributedString(string: s, attributes: [.underlineStyle: NSUnderlineStyle.single.rawValue])
-        client.setMarkedText(marked, selectionRange: NSRange(location: s.utf16.count, length: 0), replacementRange: noRange)
+        if start != NSNotFound { replaceShown(with: s, client); return }
+        let style = markedStyle ?? markedAttributes(client)
+        markedStyle = style
+        client.setMarkedText(NSAttributedString(string: s, attributes: style),
+                             selectionRange: NSRange(location: s.utf16.count, length: 0), replacementRange: noRange)
+    }
+
+    // The word being typed must be drawn in the text field's own font: without a font attribute,
+    // native apps (Telegram) draw it in a default font of another size, so the line shifts on every
+    // key and again when the word is committed. Style = macOS's "converted text" mark (thin
+    // underline), never a selection-like background. Looked up once per word.
+    private func markedAttributes(_ client: IMKTextInput) -> [NSAttributedString.Key: Any] {
+        var style = [NSAttributedString.Key: Any]()
+        let range = NSRange(location: NSNotFound, length: 0)
+        for (k, v) in mark(forStyle: kTSMHiliteConvertedText, at: range) ?? [:] {
+            if let key = k.base as? NSAttributedString.Key { style[key] = v }
+            else if let key = k.base as? String { style[NSAttributedString.Key(key)] = v }
+        }
+        let at = client.selectedRange().location
+        var line = NSRect.zero
+        if at != NSNotFound, let attrs = client.attributes(forCharacterIndex: max(at, 1) - 1, lineHeightRectangle: &line),
+           let font = attrs[NSAttributedString.Key.font] ?? attrs[NSAttributedString.Key.font.rawValue] {
+            style[.font] = font
+        }
+        style[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        style[.backgroundColor] = nil
+        if let id = client.bundleIdentifier(), loggedFontApps.insert(id).inserted {
+            log.notice("marked font in \(id, privacy: .public): \(String(describing: style[.font]), privacy: .public)")
+        }
+        return style
     }
 
     // Word end: insert the decided text (Vietnamese, English, or keys as typed).
     private func commit(_ client: IMKTextInput) {
         guard !word.isEmpty else { return }
-        client.insertText(word.commit(method), replacementRange: noRange)
-        word = Word()
+        let final = word.commit(method)
+        if start == NSNotFound {
+            client.insertText(final, replacementRange: noRange)
+        } else {
+            replaceShown(with: final, client)
+        }
+        reset()
     }
 
     private func toggle(_ client: IMKTextInput) {

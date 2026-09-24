@@ -81,6 +81,10 @@ EOF2
 cp build/icon.tiff "$APP/Contents/Resources/"
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
+# Real Vietnamese syllables (~10 s, from macOS's vi dictionary), used to keep half-typed words stable.
+[ -s build/vietnamese.txt ] || "$APP/Contents/MacOS/MacUnikey" --syllables > build/vietnamese.txt
+cp build/vietnamese.txt "$APP/Contents/Resources/"
+
 # Sign with the Apple Development cert of TEAM_ID so macOS keeps the Accessibility permission
 # (needed for Return re-posting) across rebuilds; ad-hoc signatures change every build and
 # silently drop it. Set TEAM_ID (or SIGN_ID) in the environment or in signing.local

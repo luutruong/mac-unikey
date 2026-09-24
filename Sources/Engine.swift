@@ -70,6 +70,9 @@ func finish(_ raw: String, method: Method) -> String {
 /// The typed keys minus the key that cancelled a mark by double-typing — what the user meant
 /// when they undid an accent on an English word ("itss" -> "its", "generrated" -> "generated").
 /// nil when no mark was cancelled.
+/// Index in `raw` of the key that cancelled a mark by double-typing, if any.
+func undoKeyIndex(_ raw: String, method: Method) -> Int? { parse(raw, method).undoAt }
+
 func withoutUndoKey(_ raw: String, method: Method) -> String? {
     guard let i = parse(raw, method).undoAt else { return nil }
     var keys = Array(raw)
@@ -271,6 +274,15 @@ private let table: [String: [Character]] = [
     "u": Array("uúùủũụ"), "u+": Array("ưứừửữự"),
     "y": Array("yýỳỷỹỵ"),
 ]
+
+/// `s` with its tone mark removed ("tiếng" -> "tiêng").
+func withoutTone(_ s: String) -> String {
+    String(s.map { c -> Character in
+        guard let (base, mark, t) = reverseTable[Character(c.lowercased())], t != 0,
+              let row = table["\(base)\(mark)"] else { return c }
+        return c.isUppercase ? Character(row[0].uppercased()) : row[0]
+    })
+}
 
 /// `s` with its tone mark moved to each vowel: both placement styles (hòa / hoà, khụy / khuỵ).
 func toneVariants(_ s: String) -> [String] {

@@ -96,6 +96,29 @@ if CommandLine.arguments.contains("corpus") {
     print("  ties e.g.:", ties.prefix(15).joined(separator: " "))
     for f in eFail.prefix(40) { print("  EN FAIL", f) }
 
+    // Jitter: while typing, the text shown (accents removed) should only grow. A key after which
+    // letters vanish or change ("mess" -> "mesa" -> "messag") makes the word shake on screen.
+    func fold(_ s: String) -> String { s.folding(options: .diacriticInsensitive, locale: nil).replacingOccurrences(of: "đ", with: "d") }
+    // One jump per word is inherent (an accent shown, then undone by the next letter); two or more
+    // is the text flipping back and forth — that's what looks like shaking.
+    func jumps(_ input: String, _ m: Method) -> [String] {
+        var w = Word(), prev = "", out: [String] = []
+        for c in input {
+            w.type(c, m)
+            let now = w.display(m)
+            if !fold(now).hasPrefix(fold(prev)) { out.append("\(prev)→\(now)") }
+            prev = now
+        }
+        return out
+    }
+    let enJumps = words.map { ($0, jumps($0, .telex)) }
+    let viJumps = real.subtracting(plainOO).sorted().map { ($0, jumps(keys(for: $0, method: .telex), .telex)) }
+    let enOne = enJumps.filter { $0.1.count == 1 }.count, enMany = enJumps.filter { $0.1.count >= 2 }
+    let viAny = viJumps.filter { !$0.1.isEmpty }
+    print("Jitter: English \(enOne) words jump once, \(enMany.count) flip back and forth; Vietnamese \(viAny.count)/\(viJumps.count) syllables jump")
+    for (w, j) in enMany.prefix(12) { print("  FLIP", w, j.joined(separator: " ")) }
+    for (w, j) in viAny.prefix(15) { print("  VI JUMP", w, j.joined(separator: " ")) }
+
     // Compensation: whenever an English word shows accents while typing, the user presses that
     // key once more to cancel them, then finishes the word. Result must be the word.
     var cTried = 0, cOK = 0, cFail: [String] = []
