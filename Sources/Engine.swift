@@ -54,19 +54,31 @@ private func vowelIndices(_ w: [Ch]) -> [Int] {
     return r
 }
 
-func compose(_ raw: String, method: Method) -> String {
+/// Live display while typing (UniKey shows the transformed form even for non-Vietnamese words).
+func compose(_ raw: String, method: Method) -> String { render(parse(raw, method)) }
+
+/// Word end (Space…): a transformed word that isn't a Vietnamese syllable goes back to the
+/// original keystrokes, like UniKey's auto-restore ("bôk" -> "book", "cofê" -> "coffee").
+func finish(_ raw: String, method: Method) -> String {
+    let p = parse(raw, method)
+    let out = render(p)
+    return out != raw && !isSyllable(p.w, tone: p.tone) ? raw : out
+}
+
+private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int) {
     var w: [Ch] = []
     var tone = 0 // 1 sắc, 2 huyền, 3 hỏi, 4 ngã, 5 nặng
+    var undone: Set<Character> = [] // keys undone by double-typing stay literal ("asss" -> "ass")
 
     for key in raw {
         let k = Character(key.lowercased())
         let lit = Ch(base: k, upper: key.isUppercase)
-        guard let act = action(k, method) else { w.append(lit); continue }
+        guard !undone.contains(k), let act = action(k, method) else { w.append(lit); continue }
         let vi = vowelIndices(w)
 
         // Set `mark` on index i; typing the same mark twice undoes it and emits the key.
         func toggle(_ i: Int, _ mark: Mark) {
-            if w[i].mark == mark { w[i].mark = .none; w.append(lit) } else { w[i].mark = mark }
+            if w[i].mark == mark { w[i].mark = .none; w.append(lit); undone.insert(k) } else { w[i].mark = mark }
         }
         // Horn on "uo" pair -> "ươ"; returns false if there is no such pair.
         func hornPair() -> Bool {
@@ -74,7 +86,7 @@ func compose(_ raw: String, method: Method) -> String {
                   w[vi[p + 1]].base == "o", vi[p + 1] == vi[p] + 1 else { return false }
             let (u, o) = (vi[p], vi[p + 1])
             if w[u].mark == .horn && w[o].mark == .horn {
-                w[u].mark = .none; w[o].mark = .none; w.append(lit)
+                w[u].mark = .none; w[o].mark = .none; w.append(lit); undone.insert(k)
             } else { w[u].mark = .horn; w[o].mark = .horn }
             return true
         }
@@ -82,7 +94,7 @@ func compose(_ raw: String, method: Method) -> String {
         switch act {
         case .tone(let t):
             if vi.isEmpty || (t == 0 && tone == 0) { w.append(lit) }
-            else if t == tone && t != 0 { tone = 0; w.append(lit) }
+            else if t == tone && t != 0 { tone = 0; w.append(lit); undone.insert(k) }
             else { tone = t }
         case .hat(let targets):
             if let i = vi.last(where: { targets.contains(w[$0].base) }) { toggle(i, .hat) } else { w.append(lit) }
@@ -92,7 +104,7 @@ func compose(_ raw: String, method: Method) -> String {
             if hornPair() { break }
             if let i = vi.last(where: { "ou".contains(w[$0].base) }) { toggle(i, .horn) } else { w.append(lit) }
         case .w:
-            if let i = w.indices.last, w[i].fromW { w[i] = lit; break } // "ww" -> "w"
+            if let i = w.indices.last, w[i].fromW { w[i] = lit; undone.insert(k); break } // "ww" -> "w"
             if hornPair() { break }
             if let i = vi.last(where: { "aou".contains(w[$0].base) }) {
                 toggle(i, w[i].base == "a" ? .breve : .horn)
@@ -103,7 +115,14 @@ func compose(_ raw: String, method: Method) -> String {
             if let f = w.first, f.base == "d" { toggle(0, .stroke) } else { w.append(lit) }
         }
     }
+    // "ươ" never ends a Vietnamese syllable: word-final it is "uơ" (thuở, huơ).
+    if w.count >= 2, w[w.count - 1].base == "o", w[w.count - 1].mark == .horn,
+       w[w.count - 2].base == "u", w[w.count - 2].mark == .horn { w[w.count - 2].mark = .none }
+    return (w, tone)
+}
 
+private func render(_ p: (w: [Ch], tone: Int)) -> String {
+    let (w, tone) = p
     // Tone placement (old style, UniKey default).
     var pos: Int?
     let vi = vowelIndices(w)
@@ -112,8 +131,6 @@ func compose(_ raw: String, method: Method) -> String {
         else if vi.count == 1 || last < w.count - 1 { pos = last }             // has final consonant
         else { pos = vi.count == 2 ? vi[0] : vi[1] }                           // hòa, múa / khuỷu
     }
-    // Spell check: anything that isn't a Vietnamese syllable ("book", "coffee") stays as typed.
-    if !isSyllable(w, tone: tone) { return raw }
     return w.indices.map { glyph(w[$0], tone: $0 == pos ? tone : 0) }.joined()
 }
 

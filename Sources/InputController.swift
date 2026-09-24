@@ -1,12 +1,29 @@
 import Cocoa
 import InputMethodKit
 
+// Chromium/Electron apps (Chrome, VS Code, Claude, Slack…) apply text edits asynchronously, so
+// selectedRange() is stale right after an insert and in-place rewriting drops/overwrites keys.
+// Those get marked text instead. Detected by Chromium's resource pack; cached per bundle id.
+private var chromiumCache: [String: Bool] = [:]
+private func isChromium(_ bundleID: String?) -> Bool {
+    guard let id = bundleID else { return false }
+    if let v = chromiumCache[id] { return v }
+    var v = false
+    if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+        let fw = app.appendingPathComponent("Contents/Frameworks")
+        let items = (try? FileManager.default.contentsOfDirectory(atPath: fw.path)) ?? []
+        v = items.contains { FileManager.default.fileExists(atPath: fw.appendingPathComponent("\($0)/Resources/chrome_100_percent.pak").path) }
+    }
+    chromiumCache[id] = v
+    return v
+}
+
 @objc(InputController)
 class InputController: IMKInputController {
     private var raw = ""
     // Direct mode: the word is typed straight into the document and rewritten in place
-    // (no marked-text highlight). `start` = where the word begins, `shown` = its current length.
-    // start == NSNotFound -> client can't report the cursor (e.g. Terminal), use marked text.
+    // (no underline). `start` = where the word begins, `shown` = its current length.
+    // start == NSNotFound -> marked text (Chromium/Electron, or client can't report the cursor).
     private var start = NSNotFound
     private var shown = 0
     private let noRange = NSRange(location: NSNotFound, length: 0)
@@ -34,7 +51,7 @@ class InputController: IMKInputController {
             commit(client); return false // space, punctuation, enter, arrows… end the word
         }
         if raw.isEmpty { // first key of a word: remember where it goes (replacing any selection)
-            let sel = client.selectedRange()
+            let sel = isChromium(client.bundleIdentifier()) ? noRange : client.selectedRange()
             start = sel.location
             shown = sel.location == NSNotFound ? 0 : sel.length
         }
@@ -47,13 +64,20 @@ class InputController: IMKInputController {
             client.insertText(s, replacementRange: NSRange(location: start, length: shown))
             shown = s.utf16.count
         } else {
-            client.setMarkedText(s, selectionRange: NSRange(location: s.utf16.count, length: 0), replacementRange: noRange)
+            // Thin underline only: a plain string lets some apps paint it like a selection.
+            let marked = NSAttributedString(string: s, attributes: [.underlineStyle: NSUnderlineStyle.single.rawValue])
+            client.setMarkedText(marked, selectionRange: NSRange(location: s.utf16.count, length: 0), replacementRange: noRange)
         }
     }
 
+    // Word end: auto-restore non-Vietnamese words to the typed keys (UniKey "gõ thông minh").
     private func commit(_ client: IMKTextInput) {
-        if !raw.isEmpty && start == NSNotFound {
-            client.insertText(compose(raw, method: method), replacementRange: noRange)
+        guard !raw.isEmpty else { return reset() }
+        let final = finish(raw, method: method)
+        if start == NSNotFound {
+            client.insertText(final, replacementRange: noRange)
+        } else if final != compose(raw, method: method) {
+            client.insertText(final, replacementRange: NSRange(location: start, length: shown))
         }
         reset()
     }
