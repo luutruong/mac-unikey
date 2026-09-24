@@ -11,27 +11,31 @@ swiftc -O -swift-version 5 -module-name MacUnikey Sources/*.swift \
     -framework InputMethodKit -o "$APP/Contents/MacOS/MacUnikey"
 cp Info.plist "$APP/Contents/"
 
-# Menu-bar icon: rounded square with "Vi" knocked out, 1x + 2x, template (macOS tints it).
+# Menu-bar icon, matching the system "A" badge of U.S.: 22x16pt rounded rect (r=4),
+# 12pt bold text knocked out and centered on cap height. 1x + 2x, template (macOS tints it).
 swift - <<'EOF2'
 import AppKit
+let (w, h) = (22, 16)
 func rep(_ scale: Int) -> NSBitmapImageRep {
-    let r = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16 * scale, pixelsHigh: 16 * scale, bitsPerSample: 8,
+    let r = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w * scale, pixelsHigh: h * scale, bitsPerSample: 8,
                              samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
                              bytesPerRow: 0, bitsPerPixel: 0)!
-    r.size = NSSize(width: 16, height: 16)
-    NSGraphicsContext.saveGraphicsState()
+    r.size = NSSize(width: w, height: h)
     let ctx = NSGraphicsContext(bitmapImageRep: r)!
     NSGraphicsContext.current = ctx
+    let cg = ctx.cgContext
     NSColor.black.setFill()
-    NSBezierPath(roundedRect: NSRect(x: 0.5, y: 1.5, width: 15, height: 13), xRadius: 3.5, yRadius: 3.5).fill()
-    ctx.cgContext.setBlendMode(.destinationOut)
-    let s = NSAttributedString(string: "Vi", attributes: [.font: NSFont.systemFont(ofSize: 10.5, weight: .bold)])
-    let b = s.boundingRect(with: .zero, options: [.usesLineFragmentOrigin, .usesFontLeading])
-    s.draw(at: NSPoint(x: (16 - b.width) / 2, y: (16 - b.height) / 2 + 0.25))
-    NSGraphicsContext.restoreGraphicsState()
+    NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: w, height: h), xRadius: 4, yRadius: 4).fill()
+    cg.setBlendMode(.destinationOut)
+    let font = NSFont.systemFont(ofSize: 12, weight: .bold)
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Vi", attributes: [.font: font]))
+    let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+    cg.textPosition = CGPoint(x: (Double(w) - width) / 2 + 0.5, y: (Double(h) - font.capHeight) / 2)
+    CTLineDraw(line, cg)
+    NSGraphicsContext.current = nil
     return r
 }
-let img = NSImage(size: NSSize(width: 16, height: 16))
+let img = NSImage(size: NSSize(width: w, height: h))
 img.addRepresentations([rep(1), rep(2)])
 try! img.tiffRepresentation!.write(to: URL(fileURLWithPath: "build/icon.tiff"))
 EOF2
