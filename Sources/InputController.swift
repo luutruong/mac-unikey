@@ -1,5 +1,8 @@
 import Cocoa
 import InputMethodKit
+import os
+
+private let log = Logger(subsystem: "com.luutruong.inputmethod.MacUnikey", category: "return")
 
 // Every word is composed as marked text (thin underline) and committed at word end.
 // In-place rewriting via insertText(replacementRange:) proved unreliable: Chromium/Electron
@@ -64,7 +67,9 @@ class InputController: IMKInputController {
         if (event.keyCode == 36 || event.keyCode == 76), !raw.isEmpty, // Return / keypad Enter
            let id = client.bundleIdentifier() {
             commit(client)
-            if repost(event, to: id) { return true }
+            let posted = repost(event, to: id)
+            log.info("Return in \(id, privacy: .public): reposted=\(posted, privacy: .public) access=\(CGPreflightPostEventAccess(), privacy: .public)")
+            if posted { return true }
             // No permission: Chromium swallows it (a 2nd Return sends); native apps get it now.
             return isChromium(id)
         }

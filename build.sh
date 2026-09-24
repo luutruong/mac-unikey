@@ -81,7 +81,24 @@ EOF2
 cp build/icon.tiff "$APP/Contents/Resources/"
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
-codesign --force -s - "$APP"
+# Sign with the Apple Development cert of TEAM_ID so macOS keeps the Accessibility permission
+# (needed for Return re-posting) across rebuilds; ad-hoc signatures change every build and
+# silently drop it. Set TEAM_ID (or SIGN_ID) in the environment or in signing.local
+# (git-ignored), e.g.  echo 'TEAM_ID=XXXXXXXXXX' > signing.local.  Unset -> ad-hoc.
+[ -f signing.local ] && . ./signing.local
+TEAM_ID="${TEAM_ID:-}"
+if [ -z "${SIGN_ID:-}" ] && [ -n "$TEAM_ID" ]; then
+    for h in $(security find-identity -v -p codesigning | awk '/Apple Development/ {print $2}'); do
+        if security find-certificate -a -Z -p | awk -v h="$h" '/SHA-1 hash:/ {f=($3==h)} f' |
+           openssl x509 -noout -subject 2>/dev/null | grep -q "OU=$TEAM_ID"; then SIGN_ID=$h; break; fi
+    done
+fi
+codesign --force -s "${SIGN_ID:--}" "$APP"
+# A revoked certificate stops the input method from launching (no typing at all).
+if spctl -a -vv -t exec "$APP" 2>&1 | grep -q REVOKED; then
+    echo "warning: signing certificate is revoked, falling back to ad-hoc" >&2
+    codesign --force -s - "$APP"
+fi
 
 DEST="$HOME/Library/Input Methods"
 mkdir -p "$DEST"
