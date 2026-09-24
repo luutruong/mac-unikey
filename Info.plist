@@ -10,6 +10,8 @@
 	<string>Gõ tiếng Việt</string>
 	<key>CFBundleExecutable</key>
 	<string>MacUnikey</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleVersion</key>

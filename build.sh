@@ -38,8 +38,48 @@ func rep(_ scale: Int) -> NSBitmapImageRep {
 let img = NSImage(size: NSSize(width: w, height: h))
 img.addRepresentations([rep(1), rep(2)])
 try! img.tiffRepresentation!.write(to: URL(fileURLWithPath: "build/icon.tiff"))
+
+// App icon (Finder): macOS grid — 824pt rounded square centered on a 1024 canvas,
+// red gradient with a soft shadow, white "Vi" centered on cap height.
+func appIcon(_ px: Int) -> Data {
+    let r = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
+                             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                             bytesPerRow: 0, bitsPerPixel: 0)!
+    let ctx = NSGraphicsContext(bitmapImageRep: r)!
+    NSGraphicsContext.current = ctx
+    let cg = ctx.cgContext
+    let k = CGFloat(px) / 1024
+    cg.scaleBy(x: k, y: k)
+    let body = NSBezierPath(roundedRect: NSRect(x: 100, y: 100, width: 824, height: 824), xRadius: 185, yRadius: 185)
+    NSGraphicsContext.saveGraphicsState()
+    let shadow = NSShadow()
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
+    shadow.shadowOffset = NSSize(width: 0, height: -10)
+    shadow.shadowBlurRadius = 20
+    shadow.set()
+    NSColor(red: 0.85, green: 0.15, blue: 0.12, alpha: 1).setFill()
+    body.fill()
+    NSGraphicsContext.restoreGraphicsState()
+    NSGradient(starting: NSColor(red: 0.96, green: 0.30, blue: 0.22, alpha: 1),
+               ending: NSColor(red: 0.74, green: 0.09, blue: 0.08, alpha: 1))!.draw(in: body, angle: -90)
+    let font = NSFont.systemFont(ofSize: 440, weight: .bold)
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Vi",
+        attributes: [.font: font, .foregroundColor: NSColor.white]))
+    let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+    cg.textPosition = CGPoint(x: (1024 - width) / 2 + 8, y: (1024 - font.capHeight) / 2)
+    CTLineDraw(line, cg)
+    NSGraphicsContext.current = nil
+    return r.representation(using: .png, properties: [:])!
+}
+let set = URL(fileURLWithPath: "build/AppIcon.iconset")
+try? FileManager.default.createDirectory(at: set, withIntermediateDirectories: true)
+for s in [16, 32, 128, 256, 512] {
+    try! appIcon(s).write(to: set.appendingPathComponent("icon_\(s)x\(s).png"))
+    try! appIcon(s * 2).write(to: set.appendingPathComponent("icon_\(s)x\(s)@2x.png"))
+}
 EOF2
 cp build/icon.tiff "$APP/Contents/Resources/"
+iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
 codesign --force -s - "$APP"
 
