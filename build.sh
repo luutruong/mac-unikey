@@ -119,3 +119,13 @@ killall MacUnikey 2>/dev/null || true
 rm -rf "$DEST/MacUnikey.app"
 cp -R "$APP" "$DEST/"
 echo "Installed to $DEST/MacUnikey.app"
+cat <<MSG
+
+Next: load the new build (the old one was just quit).
+  - First install: System Settings > Keyboard > Input Sources > Edit… > + > Vietnamese > MacUnikey
+  - Already added: switch to another input source (e.g. U.S.) and back to MacUnikey (Ctrl+Space)
+MSG
+if [ ${#FLAGS[@]} -gt 0 ]; then
+    echo "Typing log ON: $HOME/Library/Application Support/MacUnikey/typing.log"
+    echo "  watch it:  tail -f \"$HOME/Library/Application Support/MacUnikey/typing.log\""
+fi
