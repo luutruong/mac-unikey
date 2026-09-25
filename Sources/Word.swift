@@ -28,7 +28,7 @@ struct Word {
 
     /// V = Vietnamese form, R = keys as typed, U = keys minus a cancelling double key.
     /// 1. V is a real Vietnamese word (either tone style) -> V (tiếng, ít, cả: ties go to Vietnamese)
-    ///    …except teen-code initials j z, where English wins ("zoo", "jet" but "zij" -> "zị")
+    ///    …except teen code (j z initials, òh, chộ), where English wins ("zoo", "ahs" but "zij" -> "zị")
     /// 2. R is an English word (3+ letters)                -> R (seems, message, coffee)
     ///    …unless U is English too and only U is in the plain word list: the spell checker also
     ///    accepts stretched forms, so "mixx" -> "mix", "errr" -> "err", but "pass" stays
@@ -39,7 +39,7 @@ struct Word {
     ///    at word end: not a real Vietnamese word, so U if a mark was cancelled, else R
     ///    ("bara" not "bẩ", "tesst" -> "test", "json")
     private func decide(_ v: String, _ m: Method, final: Bool) -> String {
-        let teen = raw.first.map { "jzJZ".contains($0) } ?? false
+        let teen = raw.first.map { "jzJZ".contains($0) } ?? false || Dictionaries.isTeen(v)
         if v != raw && Dictionaries.isVietnamese(v) && !(teen && raw.count >= 3 && Dictionaries.isEnglish(raw)) { return v }
         let u = withoutUndoKey(raw, method: m)
         let uEnglish = u.map { $0.count >= 2 && Dictionaries.isEnglish($0) } ?? false
@@ -62,8 +62,13 @@ enum Dictionaries {
     // The spell checkers skip words with digits, and "en" skips non-ASCII letters: check letters first.
     // ponytail: hand-picked teen code the vi dictionary lacks; add words as they show up in the typing log
     private static let teenCode: Set<String> = ["chộ"]
+    /// Teen code the dictionary lacks: the list, and a marked vowel + h (òh, ừh).
+    static func isTeen(_ w: String) -> Bool {
+        let w = w.lowercased()
+        return teenCode.contains(w) || (w.count == 2 && w.hasSuffix("h") && !w.first!.isASCII)
+    }
     static func isVietnamese(_ w: String) -> Bool {
-        w.allSatisfy(\.isLetter) && (teenCode.contains(w.lowercased()) || toneVariants(w).contains { lookup($0, "vi") })
+        w.allSatisfy(\.isLetter) && (isTeen(w) || toneVariants(w).contains { lookup($0, "vi") })
     }
     static func isEnglish(_ w: String) -> Bool {
         w.allSatisfy { $0.isASCII && $0.isLetter } && lookup(w, "en")

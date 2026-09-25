@@ -255,6 +255,7 @@ private func isSyllable(_ w: [Ch], tone: Int, prefix: Bool = false) -> Bool {
         let rest = s.dropFirst(ini.count)
         let v = String(rest.prefix { vowelGlyphs.contains($0) })
         let fin = String(rest.dropFirst(v.count))
+        if ini.isEmpty && v.count == 1 && fin == "h" { return true } // teen interjections: òh, ùh, ừh
         if prefix {
             let stopOK = !(fin.hasPrefix("c") || fin.hasPrefix("p") || fin.hasPrefix("t")) || [0, 1, 5].contains(tone)
             if v.isEmpty ? fin.isEmpty : vowelPrefixOK(v) && finalPrefixes.contains(fin) && stopOK {
