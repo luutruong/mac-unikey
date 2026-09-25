@@ -219,8 +219,8 @@ private func render(_ p: (w: [Ch], tone: Int, undoAt: Int?)) -> String {
     return w.indices.map { glyph(w[$0], tone: $0 == pos ? tone : 0) }.joined()
 }
 
-private let initials: [String] = ["", "b", "c", "ch", "d", "đ", "g", "gh", "gi", "h", "k", "kh", "l", "m", "n",
-    "ng", "ngh", "nh", "p", "ph", "qu", "r", "s", "t", "th", "tr", "v", "x"]
+private let initials: [String] = ["", "b", "c", "ch", "d", "đ", "g", "gh", "gi", "h", "j", "k", "kh", "l", "m", "n",
+    "ng", "ngh", "nh", "p", "ph", "qu", "r", "s", "t", "th", "tr", "v", "x", "z"]  // j z: teen code (jì, zị); f would shake English f-words
 // Vowel clusters that may take a final consonant, and those that end the syllable.
 private let closedVowels: Set<String> = ["a", "ă", "â", "e", "ê", "i", "o", "ô", "ơ", "u", "ư", "y",
     "iê", "yê", "oa", "oă", "oe", "oo", "uâ", "uê", "uô", "ươ", "uy", "uyê"]

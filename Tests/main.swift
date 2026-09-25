@@ -16,6 +16,9 @@ let cases: [(String, Method, String)] = [
     ("hello", .telex, "hello"), ("generated", .telex, "generated"), ("matf", .telex, "matf"), ("mats", .telex, "mát"),
     ("a88", .vni, "a8"), ("thuowr", .telex, "thuở"), ("huow", .telex, "huơ"),
     ("thuowngf", .telex, "thường"), ("gieengs", .telex, "giếng"), ("quys", .telex, "quý"), ("dduwocj", .telex, "được"), ("nguwowif", .telex, "người"), ("huwowu", .telex, "hươu"), ("hoa8c5", .vni, "hoặc"), ("to6i", .vni, "tôi"),
+    // teen code
+    ("Zij", .telex, "Zị"), ("Chooj", .telex, "Chộ"), ("zui", .telex, "zui"), ("jif", .telex, "jì"),
+    ("fair", .telex, "fair"), ("zoo", .telex, "zoo"), ("zoom", .telex, "zoom"), ("jeans", .telex, "jeans"), ("fix", .telex, "fix"),
 ]
 
 // While typing (compose): transforms shown even if the word isn't Vietnamese yet
