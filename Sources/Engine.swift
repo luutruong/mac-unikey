@@ -89,7 +89,12 @@ func isLiteral(_ raw: String, method: Method) -> Bool {
 /// Delete removes the last *visible* character, like UniKey ("việt" -> "việ", not "viêt").
 /// A literal (non-Vietnamese) word just loses its last key and stays literal ("depe" not "dêp").
 func backspace(_ raw: String, literal: Bool, method: Method) -> (raw: String, literal: Bool) {
-    if literal { let r = String(raw.dropLast()); return (r, !r.isEmpty) }
+    if literal {
+        // Deleting the key that broke the word makes it Vietnamese again ("TYooi" -> "T" + "ooi" = "Tôi"),
+        // unless composing would change what is on screen ("mess" stays "mess", not "mes").
+        let r = String(raw.dropLast())
+        return (r, !r.isEmpty && (isLiteral(r, method: method) || compose(r, method: method) != r))
+    }
     let shown = String(compose(raw, method: method).dropLast())
     if shown.isEmpty { return ("", false) }
     let k = keys(for: shown, method: method)

@@ -84,6 +84,33 @@ private func showHUD(_ text: String, near client: IMKTextInput) {
 private var loggedFontApps = Set<String>() // log the marked-text font once per app (debugging)
 private var loggedModeApps = Set<String>()
 
+// Typing log, to improve the English/Vietnamese rules from real use: one tab-separated line per
+// finished word (keys typed -> text committed) and per Delete (what was on screen), with the app.
+// Built in only with `./build.sh --enable-logging`; written to ~/Library/Application Support/MacUnikey/.
+// Password fields never reach input methods.
+#if TYPING_LOG
+private let typingLogURL: URL = {
+    let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("MacUnikey")
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent("typing.log")
+}()
+private let typingLogFile: FileHandle? = {
+    if !FileManager.default.fileExists(atPath: typingLogURL.path) {
+        FileManager.default.createFile(atPath: typingLogURL.path, contents: nil)
+    }
+    let h = try? FileHandle(forWritingTo: typingLogURL)
+    _ = try? h?.seekToEnd()
+    return h
+}()
+private func logTyping(_ fields: String...) {
+    let line = ([ISO8601DateFormatter().string(from: Date())] + fields).joined(separator: "\t") + "\n"
+    typingLogFile?.write(Data(line.utf8))
+}
+#else
+private func logTyping(_ fields: String...) {}
+#endif
+
 @objc(InputController)
 class InputController: IMKInputController {
     private var word = Word() // the word being typed; all typing decisions live in Word.swift
@@ -97,6 +124,7 @@ class InputController: IMKInputController {
     private var shownText = "" // what direct mode last put in the document
     private let noRange = NSRange(location: NSNotFound, length: 0)
     private var chordArmed = false // Ctrl+Shift pressed with no other key yet
+    private var afterDelete = false // last key was a Delete the app handled: the next word may continue the text
 
     // V/E toggle (UniKey Ctrl+Shift), shared by all apps.
     private var vietnamese: Bool {
@@ -125,6 +153,8 @@ class InputController: IMKInputController {
         guard event.type == .keyDown else { return false }
         chordArmed = false
         guard vietnamese else { return false }
+        let resume = afterDelete
+        afterDelete = false
         // Direct mode: the cursor moved (click, other edit) since our last change -> forget the word.
         if !word.isEmpty, start != NSNotFound, client.selectedRange().location != start + shown { reset() }
         if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
@@ -143,14 +173,15 @@ class InputController: IMKInputController {
             return isChromium(id)
         }
         if event.keyCode == 51 { // backspace
-            guard !word.isEmpty else { return false }
+            logTyping("delete", client.bundleIdentifier() ?? "?", word.isEmpty ? "" : word.display(method))
+            guard !word.isEmpty else { afterDelete = true; return false }
             word.delete(method)
             // Direct mode, Delete just removes the last letter ("việt" -> "việ"): let the app delete it natively.
             if start != NSNotFound, !shownText.isEmpty, shown == shownText.utf16.count,
                word.display(method) == String(shownText.dropLast()) {
                 shownText.removeLast()
                 shown = shownText.utf16.count
-                if word.isEmpty { reset() }
+                if word.isEmpty { reset(); afterDelete = true }
                 return false
             }
             update(client)
@@ -161,7 +192,7 @@ class InputController: IMKInputController {
               c.isLetter || (method == .vni && c.isNumber && !word.isEmpty) else {
             commit(client); return false // space, punctuation, enter, arrows… end the word
         }
-        if word.isEmpty { begin(client) }
+        if word.isEmpty { begin(client, resume: resume) }
         word.type(c, method)
         // Direct mode, key just adds itself at the end ("trướ" + "c"): let the app type it natively.
         // Telegram spends 3-6 ms on every insertText(replacementRange:) call; a plain key costs it nothing extra.
@@ -174,11 +205,22 @@ class InputController: IMKInputController {
     }
 
     // First key of a word: pick direct or marked mode for this app.
-    private func begin(_ client: IMKTextInput) {
+    private func begin(_ client: IMKTextInput, resume: Bool) {
         let id = client.bundleIdentifier()
         let sel = isChromium(id) ? noRange : client.selectedRange()
         start = sel.location
         shown = sel.location == NSNotFound ? 0 : sel.length // typing replaces a selection
+        // Direct mode, right after Delete: pick up the letters before the cursor as the word so far.
+        if resume, start != NSNotFound, sel.length == 0, start > 0,
+           let before = client.attributedSubstring(from: NSRange(location: max(0, start - 8), length: min(start, 8)))?.string {
+            let prefix = String(before.reversed().prefix { $0.isLetter }.reversed())
+            if !prefix.isEmpty {
+                word = Word(resuming: prefix, method)
+                shownText = prefix
+                shown = prefix.utf16.count
+                start -= shown
+            }
+        }
         if let id, loggedModeApps.insert(id).inserted {
             log.notice("mode in \(id, privacy: .public): \(self.start == NSNotFound ? "marked" : "direct", privacy: .public)")
         }
@@ -236,6 +278,7 @@ class InputController: IMKInputController {
     private func commit(_ client: IMKTextInput) {
         guard !word.isEmpty else { return }
         let final = word.commit(method)
+        logTyping("word", client.bundleIdentifier() ?? "?", method.rawValue, word.raw, final)
         if start == NSNotFound {
             client.insertText(final, replacementRange: noRange)
         } else {

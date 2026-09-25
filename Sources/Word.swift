@@ -8,6 +8,14 @@ struct Word {
 
     var isEmpty: Bool { raw.isEmpty }
 
+    init() {}
+    /// Continue a word already in the text ("co" after Delete, + "nf" -> "còn").
+    init(resuming text: String, _ m: Method) {
+        let k = keys(for: text, method: m)
+        if isLiteral(k, method: m) || compose(k, method: m) == text { (raw, literal) = (k, isLiteral(k, method: m)) }
+        else { (raw, literal) = (text, true) }
+    }
+
     mutating func type(_ c: Character, _ m: Method) {
         raw.append(c)
         if !literal && isLiteral(raw, method: m) { literal = true }

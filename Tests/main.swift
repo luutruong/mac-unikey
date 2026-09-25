@@ -57,6 +57,21 @@ func typed(_ input: String, _ m: Method) -> String {
     return w.commit(m)
 }
 for (input, m, want) in cases { check("typed \(input)", typed(input, m), want) }
+// Typo, Delete back past it, type on ("TYooi" ⌫⌫⌫⌫ "ooi"), and continuing a word left in the text.
+func typedEdit(_ first: String, _ n: Int, _ then: String, _ m: Method) -> String {
+    var w = Word()
+    for c in first { w.type(c, m) }
+    for _ in 0..<n { w.delete(m) }
+    for c in then { w.type(c, m) }
+    return w.commit(m)
+}
+check("TYooi⌫4+ooi", typedEdit("TYooi", 4, "ooi", .telex), "Tôi")
+check("messa⌫1", typedEdit("messa", 1, "", .telex), "mess")
+for (text, more, want) in [("co", "nf", "còn"), ("ch", "ayj", "chạy"), ("việ", "t", "việt"), ("timeo", "ut", "timeout")] {
+    var w = Word(resuming: text, .telex)
+    for c in more { w.type(c, .telex) }
+    check("resume \(text)+\(more)", w.commit(.telex), want)
+}
 // Corpus run (slow): `./t corpus` — whole-dictionary checks instead of hand-picked words.
 if CommandLine.arguments.contains("corpus") {
     // Vietnamese: every syllable the macOS Vietnamese dictionary accepts, typed in Telex and VNI,

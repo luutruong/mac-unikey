@@ -3,11 +3,20 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# --enable-logging: log typed words (see InputController.swift) to improve the rules.
+FLAGS=()
+for a in "$@"; do
+    case "$a" in
+        --enable-logging) FLAGS+=(-D TYPING_LOG) ;;
+        *) echo "usage: $0 [--enable-logging]" >&2; exit 1 ;;
+    esac
+done
+
 APP=build/MacUnikey.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-swiftc -O -swift-version 5 -module-name MacUnikey Sources/*.swift \
+swiftc -O -swift-version 5 -module-name MacUnikey Sources/*.swift ${FLAGS[@]+"${FLAGS[@]}"} \
     -framework InputMethodKit -o "$APP/Contents/MacOS/MacUnikey"
 cp Info.plist "$APP/Contents/"
 
