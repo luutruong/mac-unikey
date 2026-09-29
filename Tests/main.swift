@@ -5,20 +5,20 @@ let cases: [(String, Method, String)] = [
     ("vieetj", .telex, "việt"), ("tieengs", .telex, "tiếng"), ("tiengse", .telex, "tiếng"),
     ("hoaf", .telex, "hòa"), ("nguowif", .telex, "người"), ("dduwowcj", .telex, "được"),
     ("quar", .telex, "quả"), ("gif", .telex, "gì"), ("gias", .telex, "giá"),
-    ("ass", .telex, "ass"), ("aaa", .telex, "aa"), ("xooong", .telex, "xoong"), ("tw", .telex, "tư"), ("ww", .telex, "w"), ("off", .telex, "off"), ("pass", .telex, "pass"),
+    ("ass", .telex, "as"), ("aaa", .telex, "aa"), ("xooong", .telex, "xoong"), ("tw", .telex, "tư"), ("ww", .telex, "w"), ("off", .telex, "of"), ("pass", .telex, "pas"), ("this", .telex, "thí"), ("thiss", .telex, "this"),
     ("hoawcj", .telex, "hoặc"), ("khuyur", .telex, "khuỷu"), ("Vieetj", .telex, "Việt"),
     ("DDi", .telex, "Đi"), ("asz", .telex, "a"), ("str", .telex, "str"), ("uoiw", .telex, "ươi"),
     ("hoanf", .telex, "hoàn"), ("muaf", .telex, "mùa"), ("tuaanf", .telex, "tuần"),
     ("vie6t5", .vni, "việt"), ("d9i", .vni, "đi"), ("nguo72i", .vni, "người"),
-    // spell check: English words stay as typed
-    ("book", .telex, "book"), ("coffee", .telex, "coffee"), ("windows", .telex, "windows"),
-    ("Text", .telex, "Text"), ("message", .telex, "message"), ("class", .telex, "class"), ("test", .telex, "tét"), ("banana", .telex, "banana"), ("google", .telex, "google"),
+    // not Vietnamese: keys as typed; a doubled key cancels its mark (UniKey)
+    ("book", .telex, "book"), ("coffee", .telex, "cofee"), ("windows", .telex, "windows"),
+    ("Text", .telex, "Text"), ("message", .telex, "mesage"), ("class", .telex, "clas"), ("test", .telex, "tét"), ("banana", .telex, "banana"), ("google", .telex, "google"),
     ("hello", .telex, "hello"), ("generated", .telex, "generated"), ("matf", .telex, "matf"), ("mats", .telex, "mát"),
     ("a88", .vni, "a8"), ("thuowr", .telex, "thuở"), ("huow", .telex, "huơ"),
     ("thuowngf", .telex, "thường"), ("gieengs", .telex, "giếng"), ("quys", .telex, "quý"), ("dduwocj", .telex, "được"), ("nguwowif", .telex, "người"), ("huwowu", .telex, "hươu"), ("hoa8c5", .vni, "hoặc"), ("to6i", .vni, "tôi"),
     // teen code
     ("Zij", .telex, "Zị"), ("Chooj", .telex, "Chộ"), ("zui", .telex, "zui"), ("jif", .telex, "jì"),
-    ("fair", .telex, "fair"), ("zoo", .telex, "zoo"), ("zoom", .telex, "zoom"), ("jeans", .telex, "jeans"), ("fix", .telex, "fix"),
+    ("fair", .telex, "fair"), ("zoo", .telex, "zô"), ("zoom", .telex, "zoom"), ("jeans", .telex, "jeans"), ("fix", .telex, "fix"),
     ("Ohf", .telex, "Òh"), ("ahf", .telex, "àh"), ("uwh", .telex, "ưh"), ("oh", .telex, "oh"), ("ohm", .telex, "ohm"), ("each", .telex, "each"),
 ]
 
@@ -70,7 +70,7 @@ func typedEdit(_ first: String, _ n: Int, _ then: String, _ m: Method) -> String
     return w.commit(m)
 }
 check("TYooi⌫4+ooi", typedEdit("TYooi", 4, "ooi", .telex), "Tôi")
-check("messa⌫1", typedEdit("messa", 1, "", .telex), "mess")
+check("messa⌫1", typedEdit("messa", 1, "", .telex), "mes")
 for (text, more, want) in [("co", "nf", "còn"), ("ch", "ayj", "chạy"), ("việ", "t", "việt"), ("timeo", "ut", "timeout")] {
     var w = Word(resuming: text, .telex)
     for c in more { w.type(c, .telex) }
@@ -98,22 +98,10 @@ if CommandLine.arguments.contains("corpus") {
     print("Vietnamese: \(real.count) syllables (\(plainOO.count) plain-oo skipped), \(vOK) ok, \(vVariant) other tone placement, \(vFail.count) failed")
     for f in vFail.prefix(40) { print("  VI FAIL", f) }
 
-    // English: every plain lowercase word in /usr/share/dict/words, typed in Telex.
+    // Plain lowercase words from /usr/share/dict/words, for the jitter check below.
     let words = ((try? String(contentsOfFile: "/usr/share/dict/words", encoding: .utf8)) ?? "")
         .split(separator: "\n").map(String.init)
         .filter { (2...12).contains($0.count) && $0.allSatisfy { ("a"..."z").contains($0) } }
-        .filter { Dictionaries.isEnglish($0) } // words macOS's English dictionary knows
-    var eOK = 0, ties: [String] = [], eFail: [String] = []
-    for w in words {
-        let got = typed(w, .telex)
-        if got == w { eOK += 1 }
-        else if Dictionaries.isVietnamese(got) { ties.append("\(w)->\(got)") }
-        else { eFail.append("\(w)->\(got)") }
-    }
-    let pct = { (n: Int) in String(format: "%.2f%%", Double(n) * 100 / Double(max(words.count, 1))) }
-    print("English: \(words.count) words, \(eOK) ok (\(pct(eOK))), \(ties.count) ties to a real Vietnamese word (\(pct(ties.count))), \(eFail.count) failed (\(pct(eFail.count)))")
-    print("  ties e.g.:", ties.prefix(15).joined(separator: " "))
-    for f in eFail.prefix(40) { print("  EN FAIL", f) }
 
     // Jitter: while typing, the text shown (accents removed) should only grow. A key after which
     // letters vanish or change ("mess" -> "mesa" -> "messag") makes the word shake on screen.

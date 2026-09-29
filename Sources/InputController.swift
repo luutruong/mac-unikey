@@ -155,8 +155,17 @@ class InputController: IMKInputController {
         guard vietnamese else { return false }
         let resume = afterDelete
         afterDelete = false
-        // Direct mode: the cursor moved (click, other edit) since our last change -> forget the word.
-        if !word.isEmpty, start != NSNotFound, client.selectedRange().location != start + shown { reset() }
+        // Direct mode: the cursor isn't where we left the word. If the word is still right before it,
+        // only our offset was stale: keep typing it. Otherwise (click, other edit) forget the word.
+        if !word.isEmpty, start != NSNotFound, case let at = client.selectedRange().location, at != start + shown {
+            if at != NSNotFound, at >= shown, text(before: at, shown, client) == shownText {
+                logTyping("rebase", client.bundleIdentifier() ?? "?", word.raw, shownText)
+                start = at - shown
+            } else {
+                logTyping("reset", client.bundleIdentifier() ?? "?", word.raw, shownText)
+                reset()
+            }
+        }
         if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             commit(client); return false
         }
@@ -173,7 +182,7 @@ class InputController: IMKInputController {
             return isChromium(id)
         }
         if event.keyCode == 51 { // backspace
-            logTyping("delete", client.bundleIdentifier() ?? "?", word.isEmpty ? "" : word.display(method))
+            logTyping("delete", client.bundleIdentifier() ?? "?", word.isEmpty ? deletedText(client) : word.display(method))
             guard !word.isEmpty else { afterDelete = true; return false }
             word.delete(method)
             // Direct mode, Delete just removes the last letter ("việt" -> "việ"): let the app delete it natively.
@@ -211,8 +220,7 @@ class InputController: IMKInputController {
         start = sel.location
         shown = sel.location == NSNotFound ? 0 : sel.length // typing replaces a selection
         // Direct mode, right after Delete: pick up the letters before the cursor as the word so far.
-        if resume, start != NSNotFound, sel.length == 0, start > 0,
-           let before = client.attributedSubstring(from: NSRange(location: max(0, start - 8), length: min(start, 8)))?.string {
+        if resume, start != NSNotFound, sel.length == 0, start > 0, let before = text(before: start, 8, client) {
             let prefix = String(before.reversed().prefix { $0.isLetter }.reversed())
             if !prefix.isEmpty {
                 word = Word(resuming: prefix, method)
@@ -224,6 +232,23 @@ class InputController: IMKInputController {
         if let id, loggedModeApps.insert(id).inserted {
             log.notice("mode in \(id, privacy: .public): \(self.start == NSNotFound ? "marked" : "direct", privacy: .public)")
         }
+    }
+
+    // Up to `n` UTF-16 units of the document right before `at`.
+    private func text(before at: Int, _ n: Int, _ client: IMKTextInput) -> String? {
+        client.attributedSubstring(from: NSRange(location: max(0, at - n), length: min(at, n)))?.string
+    }
+
+    // Typing log: the character a Delete with no word is about to remove ("" in marked mode).
+    private func deletedText(_ client: IMKTextInput) -> String {
+        #if TYPING_LOG
+        let sel = client.selectedRange()
+        if sel.location != NSNotFound, !isChromium(client.bundleIdentifier()) {
+            if sel.length > 0 { return client.attributedSubstring(from: sel)?.string ?? "" }
+            return text(before: sel.location, 2, client).flatMap { $0.last.map(String.init) } ?? ""
+        }
+        #endif
+        return ""
     }
 
     private func reset() { word = Word(); markedStyle = nil; start = NSNotFound; shown = 0; shownText = "" }

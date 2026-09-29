@@ -1,12 +1,11 @@
 # MacUnikey
 
-Bộ gõ tiếng Việt cho macOS (InputMethodKit), gõ Telex hoặc VNI theo kiểu UniKey, có kiểm tra chính tả để từ tiếng Anh được giữ nguyên.
+Bộ gõ tiếng Việt cho macOS (InputMethodKit), gõ Telex hoặc VNI theo kiểu UniKey.
 
 ## Tính năng
 
 - **Telex / VNI**: chọn trong menu của input source trên menu bar.
-- **Tự nhận từ tiếng Anh**: `book`, `coffee`, `windows` được giữ nguyên, còn `vieetj` thành `việt`. Bộ gõ tra từ điển tiếng Việt và tiếng Anh có sẵn trên macOS.
-- **Gõ lặp phím để huỷ dấu**: `ass` → `ass`, `ww` → `w`.
+- **Luật UniKey**: từ không phải tiếng Việt (`book`, `json`) được giữ như đã gõ; muốn bỏ dấu thì gõ lặp phím (`thiss` → `this`, `ass` → `as`, `ww` → `w`). Bộ gõ tra từ điển tiếng Việt có sẵn trên macOS.
 - **Chuyển Việt/Anh bằng Ctrl+Shift** (nhấn rồi thả), có nhãn nhỏ hiện dưới con trỏ.
 - **Teen code**: `zij` → `zị`, `jif` → `jì`, `ohf` → `òh`.
 - **Gõ ổn định trong app native** (Telegram, TextEdit…): sửa thẳng vào văn bản, không dùng marked text nên dòng chữ không bị nhảy. App Chromium/Electron vẫn dùng marked text.
@@ -55,15 +54,15 @@ Bản build này ghi các từ đã gõ xong và các lần nhấn Delete (theo 
 swiftc -O Sources/Engine.swift Sources/Word.swift Tests/main.swift -o build/t && ./build/t
 ```
 
-Thêm `corpus` (`./build/t corpus`) để kiểm tra trên toàn bộ từ điển: mọi âm tiết tiếng Việt (Telex/VNI), mọi từ tiếng Anh macOS biết, độ nhảy chữ khi gõ và việc huỷ dấu bằng phím lặp. Chạy khá lâu.
+Thêm `corpus` (`./build/t corpus`) để kiểm tra trên toàn bộ từ điển: mọi âm tiết tiếng Việt (Telex/VNI) và độ nhảy chữ khi gõ. Chạy khá lâu.
 
 ## Cấu trúc
 
 | File | Vai trò |
 |------|---------|
 | `Sources/Engine.swift` | Ghép phím thô của một từ thành chữ Unicode (Telex/VNI) |
-| `Sources/Word.swift` | Trạng thái một từ: chọn giữa tiếng Việt và tiếng Anh, từ điển |
+| `Sources/Word.swift` | Trạng thái một từ: chọn chữ hiển thị và chữ chốt, từ điển |
 | `Sources/InputController.swift` | Controller của IMK: xử lý phím, Delete, Return, bật/tắt V/E, menu |
-| `Sources/main.swift` | Khởi động IMK server; `--syllables` in danh sách âm tiết lúc build |
+| `Sources/main.swift` | Khởi động IMK server |
 | `Tests/main.swift` | Test các case và test corpus |
 | `build.sh` | Build, tạo icon, ký và cài đặt |

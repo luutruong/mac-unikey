@@ -67,12 +67,8 @@ func finish(_ raw: String, method: Method) -> String {
     return isSyllable(p.w, tone: p.tone) ? render(p) : raw
 }
 
-/// The typed keys minus the key that cancelled a mark by double-typing — what the user meant
-/// when they undid an accent on an English word ("itss" -> "its", "generrated" -> "generated").
-/// nil when no mark was cancelled.
-/// Index in `raw` of the key that cancelled a mark by double-typing, if any.
-func undoKeyIndex(_ raw: String, method: Method) -> Int? { parse(raw, method).undoAt }
-
+/// The typed keys minus the key that cancelled a mark by double-typing (UniKey: "ass" -> "as",
+/// "thiss" -> "this"). nil when no mark was cancelled.
 func withoutUndoKey(_ raw: String, method: Method) -> String? {
     guard let i = parse(raw, method).undoAt else { return nil }
     var keys = Array(raw)
