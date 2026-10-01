@@ -16,7 +16,10 @@ APP=build/MacUnikey.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-swiftc -O -swift-version 5 -module-name MacUnikey Sources/*.swift ${FLAGS[@]+"${FLAGS[@]}"} \
+# Target the minimum macOS in Info.plist: newer toolchains default to their own SDK's version,
+# and the system then refuses to launch the input method (no typing at all).
+MIN_OS=$(/usr/libexec/PlistBuddy -c "Print LSMinimumSystemVersion" Info.plist)
+swiftc -O -swift-version 5 -target "$(uname -m)-apple-macos$MIN_OS" -module-name MacUnikey Sources/*.swift ${FLAGS[@]+"${FLAGS[@]}"} \
     -framework InputMethodKit -o "$APP/Contents/MacOS/MacUnikey"
 cp Info.plist "$APP/Contents/"
 
