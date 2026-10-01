@@ -5,6 +5,7 @@ import AppKit
 struct Word {
     private(set) var raw = ""      // keys as typed
     private(set) var literal = false // can no longer be Vietnamese: sticky until word end
+    private var resumedLiteral = false // continues plain text ("cros" + "s"): its letters cancel no mark
 
     var isEmpty: Bool { raw.isEmpty }
 
@@ -14,6 +15,7 @@ struct Word {
         let k = keys(for: text, method: m)
         if isLiteral(k, method: m) || compose(k, method: m) == text { (raw, literal) = (k, isLiteral(k, method: m)) }
         else { (raw, literal) = (text, true) }
+        resumedLiteral = literal
     }
 
     mutating func type(_ c: Character, _ m: Method) {
@@ -32,7 +34,7 @@ struct Word {
     /// 3. while typing: V; at word end: keys as typed (json, book)
     private func decide(_ v: String, _ m: Method, final: Bool) -> String {
         if v != raw && Dictionaries.isVietnamese(v) { return v }
-        if let u = withoutUndoKey(raw, method: m) { return u }
+        if !resumedLiteral, let u = withoutUndoKey(raw, method: m) { return u }
         return final ? raw : v
     }
 }

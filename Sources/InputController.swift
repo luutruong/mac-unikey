@@ -318,6 +318,7 @@ class InputController: IMKInputController {
         guard !word.isEmpty else { return }
         let final = word.commit(method)
         logTyping("word", client.bundleIdentifier() ?? "?", method.rawValue, word.raw, final)
+        if let id = client.bundleIdentifier() { cursorMisses[id] = 0 } // only back-to-back misses count
         if start == NSNotFound {
             client.insertText(final, replacementRange: noRange)
         } else {

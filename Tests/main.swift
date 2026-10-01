@@ -71,7 +71,7 @@ func typedEdit(_ first: String, _ n: Int, _ then: String, _ m: Method) -> String
 }
 check("TYooi⌫4+ooi", typedEdit("TYooi", 4, "ooi", .telex), "Tôi")
 check("messa⌫1", typedEdit("messa", 1, "", .telex), "mes")
-for (text, more, want) in [("co", "nf", "còn"), ("ch", "ayj", "chạy"), ("việ", "t", "việt"), ("timeo", "ut", "timeout")] {
+for (text, more, want) in [("co", "nf", "còn"), ("ch", "ayj", "chạy"), ("việ", "t", "việt"), ("timeo", "ut", "timeout"), ("cros", "s", "cross"), ("proces", "s", "process")] {
     var w = Word(resuming: text, .telex)
     for c in more { w.type(c, .telex) }
     check("resume \(text)+\(more)", w.commit(.telex), want)
