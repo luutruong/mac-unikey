@@ -83,6 +83,10 @@ private func showHUD(_ text: String, near client: IMKTextInput) {
 
 private var loggedFontApps = Set<String>() // log the marked-text font once per app (debugging)
 private var loggedModeApps = Set<String>()
+// Apps whose selectedRange doesn't follow typing (Sublime Text): direct mode would drop every
+// word after its first letter, so they get marked text. Learned from resets, kept until restart.
+private var cursorMisses: [String: Int] = [:]
+private var markedApps = Set<String>()
 
 // Typing log, to improve the English/Vietnamese rules from real use: one tab-separated line per
 // finished word (keys typed -> text committed) and per Delete (what was on screen), with the app.
@@ -122,6 +126,7 @@ class InputController: IMKInputController {
     private var start = NSNotFound
     private var shown = 0
     private var shownText = "" // what direct mode last put in the document
+    private var markedReplace: NSRange? // marked mode, resumed word: the letters the first marked text replaces
     private let noRange = NSRange(location: NSNotFound, length: 0)
     private var chordArmed = false // Ctrl+Shift pressed with no other key yet
     private var afterDelete = false // last key was a Delete the app handled: the next word may continue the text
@@ -162,7 +167,11 @@ class InputController: IMKInputController {
                 logTyping("rebase", client.bundleIdentifier() ?? "?", word.raw, shownText)
                 start = at - shown
             } else {
-                logTyping("reset", client.bundleIdentifier() ?? "?", word.raw, shownText)
+                let id = client.bundleIdentifier() ?? "?"
+                logTyping("reset", id, word.raw, shownText)
+                // Reset right after a word's first letter: the app didn't report the letter we let through.
+                if word.raw.count == 1 { cursorMisses[id, default: 0] += 1 } else { cursorMisses[id] = 0 }
+                if cursorMisses[id, default: 0] >= 2, markedApps.insert(id).inserted { logTyping("marked", id) }
                 reset()
             }
         }
@@ -216,17 +225,21 @@ class InputController: IMKInputController {
     // First key of a word: pick direct or marked mode for this app.
     private func begin(_ client: IMKTextInput, resume: Bool) {
         let id = client.bundleIdentifier()
-        let sel = isChromium(id) ? noRange : client.selectedRange()
+        let marked = isChromium(id) || id.map(markedApps.contains) == true
+        let sel = marked ? noRange : client.selectedRange()
         start = sel.location
         shown = sel.location == NSNotFound ? 0 : sel.length // typing replaces a selection
-        // Direct mode, right after Delete: pick up the letters before the cursor as the word so far.
-        if resume, start != NSNotFound, sel.length == 0, start > 0, let before = text(before: start, 8, client) {
+        // Right after Delete: pick up the letters before the cursor as the word so far ("s|an" + "r" -> "sản").
+        // Marked mode asks for the cursor only here; the first marked text then replaces those letters.
+        let at = marked && resume ? client.selectedRange() : sel
+        if resume, at.location != NSNotFound, at.length == 0, at.location > 0, let before = text(before: at.location, 8, client) {
             let prefix = String(before.reversed().prefix { $0.isLetter }.reversed())
             if !prefix.isEmpty {
+                logTyping("resume", id ?? "?", prefix)
                 word = Word(resuming: prefix, method)
-                shownText = prefix
-                shown = prefix.utf16.count
-                start -= shown
+                let n = prefix.utf16.count
+                if marked { markedReplace = NSRange(location: at.location - n, length: n) }
+                else { shownText = prefix; shown = n; start -= n }
             }
         }
         if let id, loggedModeApps.insert(id).inserted {
@@ -251,7 +264,7 @@ class InputController: IMKInputController {
         return ""
     }
 
-    private func reset() { word = Word(); markedStyle = nil; start = NSNotFound; shown = 0; shownText = "" }
+    private func reset() { word = Word(); markedStyle = nil; markedReplace = nil; start = NSNotFound; shown = 0; shownText = "" }
 
     // Direct mode: send only what changed, not the whole word. Most keys just add a letter
     // ("trướ" -> "trước" inserts "c"); rewriting the word on every key makes apps like Telegram
@@ -271,7 +284,8 @@ class InputController: IMKInputController {
         let style = markedStyle ?? markedAttributes(client)
         markedStyle = style
         client.setMarkedText(NSAttributedString(string: s, attributes: style),
-                             selectionRange: NSRange(location: s.utf16.count, length: 0), replacementRange: noRange)
+                             selectionRange: NSRange(location: s.utf16.count, length: 0), replacementRange: markedReplace ?? noRange)
+        markedReplace = nil
     }
 
     // The word being typed must be drawn in the text field's own font: without a font attribute,
@@ -318,12 +332,14 @@ class InputController: IMKInputController {
         showHUD(vietnamese ? "Tiếng Việt" : "English", near: client)
     }
 
+    // Direct mode needs no commit: the word is already in the text. JetBrains IDEs ask after every
+    // key, which would end each word at its first letter; a real cursor move resets it in handle().
     override func commitComposition(_ sender: Any!) {
-        if let c = sender as? IMKTextInput { commit(c) }
+        if start == NSNotFound, let c = sender as? IMKTextInput { commit(c) }
     }
 
     override func deactivateServer(_ sender: Any!) {
-        commitComposition(sender)
+        if let c = sender as? IMKTextInput { commit(c) }
         super.deactivateServer(sender)
     }
 
