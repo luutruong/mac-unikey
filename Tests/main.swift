@@ -17,6 +17,7 @@ let cases: [(String, Method, String)] = [
     ("a88", .vni, "a8"), ("thuowr", .telex, "thuở"), ("huow", .telex, "huơ"),
     ("thuowngf", .telex, "thường"), ("gieengs", .telex, "giếng"), ("quys", .telex, "quý"), ("dduwocj", .telex, "được"), ("nguwowif", .telex, "người"), ("huwowu", .telex, "hươu"), ("hoa8c5", .vni, "hoặc"), ("to6i", .vni, "tôi"),
     // teen code
+    ("ddc", .telex, "đc"), ("DDc", .telex, "Đc"), ("ddk", .telex, "đk"), ("d9c", .vni, "đc"), ("ddd", .telex, "dd"),
     ("Zij", .telex, "Zị"), ("Chooj", .telex, "Chộ"), ("zui", .telex, "zui"), ("jif", .telex, "jì"),
     ("fair", .telex, "fair"), ("zoo", .telex, "zô"), ("zoom", .telex, "zoom"), ("jeans", .telex, "jeans"), ("fix", .telex, "fix"),
     ("Ohf", .telex, "Òh"), ("ahf", .telex, "àh"), ("uwh", .telex, "ưh"), ("oh", .telex, "oh"), ("ohm", .telex, "ohm"), ("each", .telex, "each"),

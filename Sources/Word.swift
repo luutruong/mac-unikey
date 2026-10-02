@@ -33,9 +33,18 @@ struct Word {
     /// 2. a mark was cancelled by a double key  -> keys minus that key (ass -> as, thiss -> this, ww -> w)
     /// 3. while typing: V; at word end: keys as typed (json, book)
     private func decide(_ v: String, _ m: Method, final: Bool) -> String {
+        if let a = abbreviation(m) { return a }
         if v != raw && Dictionaries.isVietnamese(v) { return v }
         if !resumedLiteral, let u = withoutUndoKey(raw, method: m) { return u }
         return final ? raw : v
+    }
+
+    /// Teen-code abbreviations: đ + consonants (đc, đt, đk). Not a syllable, but UniKey keeps the đ.
+    private func abbreviation(_ m: Method) -> String? {
+        let head = compose(String(raw.prefix(2)), method: m), tail = raw.dropFirst(2)
+        guard head.lowercased() == "đ", !tail.isEmpty,
+              tail.allSatisfy({ "bcfghjklmnpqrstvxz".contains($0.lowercased()) }) else { return nil }
+        return head + tail
     }
 }
 
