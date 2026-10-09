@@ -40,10 +40,10 @@ struct Word {
         return final ? raw : v
     }
 
-    /// Teen-code abbreviations: đ + consonants (đc, đt, đk). Not a syllable, but UniKey keeps the đ.
+    /// Teen-code abbreviations: đ alone or + consonants (đ, đc, đt, đk). Not a syllable, but UniKey keeps the đ.
     private func abbreviation(_ m: Method) -> String? {
         let head = compose(String(raw.prefix(2)), method: m), tail = raw.dropFirst(2)
-        guard head.lowercased() == "đ", !tail.isEmpty,
+        guard head.lowercased() == "đ",
               tail.allSatisfy({ "bcfghjklmnpqrstvxz".contains($0.lowercased()) }) else { return nil }
         return head + tail
     }
