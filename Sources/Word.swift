@@ -29,12 +29,13 @@ struct Word {
     func commit(_ m: Method) -> String { decide(literal ? raw : finish(raw, method: m), m, final: true) }
 
     /// UniKey rules, no English guessing:
-    /// 1. V is a real Vietnamese word          -> V (tiếng, thí, tét)
+    /// 1. at word end: V is a valid syllable (xò, đệch, tét); while typing: V is a dictionary word
     /// 2. a mark was cancelled by a double key  -> keys minus that key (ass -> as, thiss -> this, ww -> w)
     /// 3. while typing: V; at word end: keys as typed (json, book)
     private func decide(_ v: String, _ m: Method, final: Bool) -> String {
         if let a = abbreviation(m) { return a }
-        if v != raw && Dictionaries.isVietnamese(v) { return v }
+        // At word end v is finish(raw): already raw unless the keys form a valid syllable.
+        if v != raw && (final || Dictionaries.isVietnamese(v)) { return v }
         if !resumedLiteral, let u = withoutUndoKey(raw, method: m) { return u }
         return final ? raw : v
     }
