@@ -168,9 +168,11 @@ class InputController: IMKInputController {
                 start = at - shown
             } else {
                 let id = client.bundleIdentifier() ?? "?"
-                logTyping("reset", id, word.raw, shownText)
-                // Reset right after a word's first letter: the app didn't report the letter we let through.
-                if word.raw.count == 1 { cursorMisses[id, default: 0] += 1 } else { cursorMisses[id] = 0 }
+                logTyping("reset", id, word.raw, shownText, "at \(at) start \(start)")
+                // Sublime Text: right after a word's first letter the cursor is still where the word began
+                // (the app didn't report the letter we let through). A click elsewhere after a one-letter word
+                // (Telegram: switching chats) is not a miss; counting it put Telegram in marked mode -> shaking.
+                if word.raw.count == 1 && at == start { cursorMisses[id, default: 0] += 1 } else { cursorMisses[id] = 0 }
                 if cursorMisses[id, default: 0] >= 2, markedApps.insert(id).inserted { logTyping("marked", id) }
                 reset()
             }

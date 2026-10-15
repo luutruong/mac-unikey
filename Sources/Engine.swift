@@ -68,9 +68,10 @@ func finish(_ raw: String, method: Method) -> String {
 }
 
 /// The typed keys minus the key that cancelled a mark by double-typing (UniKey: "ass" -> "as",
-/// "thiss" -> "this"). nil when no mark was cancelled.
+/// "thiss" -> "this"). nil when no mark was cancelled, or when the word was already non-Vietnamese
+/// before that key, so no mark was ever shown (OpenKey: "class", "cross", "process" stay as typed).
 func withoutUndoKey(_ raw: String, method: Method) -> String? {
-    guard let i = parse(raw, method).undoAt else { return nil }
+    guard let i = parse(raw, method).undoAt, !isLiteral(String(raw.prefix(i)), method: method) else { return nil }
     var keys = Array(raw)
     keys.remove(at: i)
     return String(keys)

@@ -35,9 +35,10 @@ struct Word {
     private func decide(_ v: String, _ m: Method, final: Bool) -> String {
         if let a = abbreviation(m) { return a }
         // At word end v is finish(raw): already raw unless the keys form a valid syllable.
-        if v != raw && (final || Dictionaries.isVietnamese(v)) { return v }
-        if !resumedLiteral, let u = withoutUndoKey(raw, method: m) { return u }
-        return final ? raw : v
+        if v != raw && final { return v }
+        // The dictionary only decides between V and an undone mark: skip the lookup on most keys (Telegram waits on us).
+        guard !resumedLiteral, let u = withoutUndoKey(raw, method: m) else { return final ? raw : v }
+        return v != raw && !final && Dictionaries.isVietnamese(v) ? v : u
     }
 
     /// Teen-code abbreviations: đ alone or + consonants (đ, đc, đt, đk). Not a syllable, but UniKey keeps the đ.

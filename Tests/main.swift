@@ -12,7 +12,7 @@ let cases: [(String, Method, String)] = [
     ("vie6t5", .vni, "việt"), ("d9i", .vni, "đi"), ("nguo72i", .vni, "người"),
     // not Vietnamese: keys as typed; a doubled key cancels its mark (UniKey)
     ("book", .telex, "book"), ("coffee", .telex, "cofee"), ("windows", .telex, "windows"),
-    ("Text", .telex, "Text"), ("message", .telex, "mesage"), ("class", .telex, "clas"), ("test", .telex, "tét"), ("banana", .telex, "banana"), ("google", .telex, "google"),
+    ("Text", .telex, "Text"), ("message", .telex, "mesage"), ("class", .telex, "class"), ("Cross", .telex, "Cross"), ("process", .telex, "process"), ("cherry", .telex, "chery"), ("test", .telex, "tét"), ("banana", .telex, "banana"), ("google", .telex, "google"),
     ("hello", .telex, "hello"), ("generated", .telex, "generated"), ("matf", .telex, "matf"), ("mats", .telex, "mát"),
     ("a88", .vni, "a8"), ("thuowr", .telex, "thuở"), ("huow", .telex, "huơ"),
     ("thuowngf", .telex, "thường"), ("gieengs", .telex, "giếng"), ("quys", .telex, "quý"), ("dduwocj", .telex, "được"), ("nguwowif", .telex, "người"), ("huwowu", .telex, "hươu"), ("hoa8c5", .vni, "hoặc"), ("to6i", .vni, "tôi"),
