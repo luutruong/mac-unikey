@@ -130,6 +130,12 @@ class InputController: IMKInputController {
     private let noRange = NSRange(location: NSNotFound, length: 0)
     private var chordArmed = false // Ctrl+Shift pressed with no other key yet
     private var afterDelete = false // last key was a Delete the app handled: the next word may continue the text
+    private var sentence = SentenceStart()
+
+    private var autoCapitalize: Bool {
+        get { UserDefaults.standard.object(forKey: "autoCapitalize") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "autoCapitalize") }
+    }
 
     // V/E toggle (UniKey Ctrl+Shift), shared by all apps.
     private var vietnamese: Bool {
@@ -175,10 +181,11 @@ class InputController: IMKInputController {
                 if word.raw.count == 1 && at == start { cursorMisses[id, default: 0] += 1 } else { cursorMisses[id] = 0 }
                 if cursorMisses[id, default: 0] >= 2, markedApps.insert(id).inserted { logTyping("marked", id) }
                 reset()
+                sentence.clear()
             }
         }
         if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
-            commit(client); return false
+            sentence.clear(); commit(client); return false
         }
         if event.keyCode == 36 || event.keyCode == 76, word.isEmpty { // Return with no word: passes through
             log.notice("Return passthrough in \(client.bundleIdentifier() ?? "?", privacy: .public)")
@@ -193,6 +200,7 @@ class InputController: IMKInputController {
             return isChromium(id)
         }
         if event.keyCode == 51 { // backspace
+            sentence.clear()
             logTyping("delete", client.bundleIdentifier() ?? "?", word.isEmpty ? deletedText(client) : word.display(method))
             guard !word.isEmpty else { afterDelete = true; return false }
             word.delete(method)
@@ -208,10 +216,13 @@ class InputController: IMKInputController {
             if word.isEmpty { reset() }
             return true
         }
-        guard let s = event.characters, s.count == 1, let c = s.first, c.isASCII,
+        guard var s = event.characters, s.count == 1, var c = s.first, c.isASCII,
               c.isLetter || (method == .vni && c.isNumber && !word.isEmpty) else {
+            if let c = event.characters?.first, event.characters?.count == 1 { sentence.other(c) } else { sentence.clear() }
             commit(client); return false // space, punctuation, enter, arrows… end the word
         }
+        if word.isEmpty && sentence.armed && autoCapitalize { s = s.uppercased(); c = s.first! }
+        sentence.clear()
         if word.isEmpty { begin(client, resume: resume) }
         word.type(c, method)
         // Direct mode, key just adds itself at the end ("trướ" + "c"): let the app type it natively.
@@ -351,6 +362,9 @@ class InputController: IMKInputController {
         let v = NSMenuItem(title: "Tiếng Việt (⌃⇧)", action: #selector(toggleVietnamese), keyEquivalent: "")
         v.state = vietnamese ? .on : .off
         m.addItem(v)
+        let cap = NSMenuItem(title: "Viết hoa đầu câu", action: #selector(toggleAutoCapitalize), keyEquivalent: "")
+        cap.state = autoCapitalize ? .on : .off
+        m.addItem(cap)
         m.addItem(.separator())
         for (title, sel, meth) in [("Telex", #selector(selectTelex), Method.telex), ("VNI", #selector(selectVNI), .vni)] {
             let item = NSMenuItem(title: title, action: sel, keyEquivalent: "")
@@ -363,6 +377,7 @@ class InputController: IMKInputController {
     @objc func toggleVietnamese(_ sender: Any?) {
         if let c = client() { toggle(c) } else { vietnamese.toggle() }
     }
+    @objc func toggleAutoCapitalize(_ sender: Any?) { autoCapitalize.toggle() }
     @objc func selectTelex(_ sender: Any?) { method = .telex }
     @objc func selectVNI(_ sender: Any?) { method = .vni }
 }

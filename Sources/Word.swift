@@ -50,6 +50,20 @@ struct Word {
     }
 }
 
+/// Auto-capitalize a sentence's first letter: after . ! ? and a space ("đi. Về").
+/// Not after Return: new code lines (GoLand) must stay lowercase.
+struct SentenceStart {
+    private var afterStop = false
+    private(set) var armed = false
+    /// A key that is not part of a word (space, punctuation…).
+    mutating func other(_ c: Character) {
+        if ".!?".contains(c) { afterStop = true; armed = false }
+        else if c == " " && (afterStop || armed) { armed = true } // ". " and ".  " both arm
+        else { clear() }
+    }
+    mutating func clear() { afterStop = false; armed = false } // letter typed, Delete, click, shortcut
+}
+
 /// macOS's built-in spelling dictionaries, cached per string (lookups run on every keystroke).
 enum Dictionaries {
     private static var cache: [String: Bool] = [:]

@@ -78,6 +78,14 @@ for (text, more, want) in [("co", "nf", "còn"), ("ch", "ayj", "chạy"), ("vi�
     for c in more { w.type(c, .telex) }
     check("resume \(text)+\(more)", w.commit(.telex), want)
 }
+// Auto-capitalization: armed after . ! ? + space, not after "e.g", "3.5", Return or Tab; a letter disarms it.
+for (keys, want) in [("đi. ", true), ("? ", true), (".  ", true), ("e.g", false), ("3.5", false), (".\r", false), ("! \t", false), (". a", false)] {
+    var st = SentenceStart()
+    for k in keys { if k.isLetter { st.clear() } else { st.other(k) } }
+    check("sentence \(keys.debugDescription)", "\(st.armed)", "\(want)")
+}
+check("typed Vieetj", typed("Vieetj", .telex), "Việt")
+check("typed Ddi", typed("Ddi", .telex), "Đi")
 // Corpus run (slow): `./t corpus` — whole-dictionary checks instead of hand-picked words.
 if CommandLine.arguments.contains("corpus") {
     // Vietnamese: every syllable the macOS Vietnamese dictionary accepts, typed in Telex and VNI,
