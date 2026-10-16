@@ -221,7 +221,7 @@ class InputController: IMKInputController {
             if let c = event.characters?.first, event.characters?.count == 1 { sentence.other(c) } else { sentence.clear() }
             commit(client); return false // space, punctuation, enter, arrows… end the word
         }
-        if word.isEmpty && sentence.armed && autoCapitalize { s = s.uppercased(); c = s.first! }
+        if word.isEmpty && autoCapitalize && sentenceStart(client) { s = s.uppercased(); c = s.first! }
         sentence.clear()
         if word.isEmpty { begin(client, resume: resume) }
         word.type(c, method)
@@ -263,6 +263,13 @@ class InputController: IMKInputController {
     // Up to `n` UTF-16 units of the document right before `at`.
     private func text(before at: Int, _ n: Int, _ client: IMKTextInput) -> String? {
         client.attributedSubstring(from: NSRange(location: max(0, at - n), length: min(at, n)))?.string
+    }
+
+    // Auto-capitalize: decide from the text before the cursor; apps that don't tell us fall back to the key history.
+    private func sentenceStart(_ client: IMKTextInput) -> Bool {
+        let at = client.selectedRange().location
+        guard at != NSNotFound, let before = at == 0 ? "" : text(before: at, 8, client) else { return sentence.armed }
+        return SentenceStart.starts(after: before, at: at)
     }
 
     // Typing log: the character a Delete with no word is about to remove ("" in marked mode).

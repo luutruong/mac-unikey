@@ -84,6 +84,9 @@ for (keys, want) in [("đi. ", true), ("? ", true), (".  ", true), ("e.g", false
     for k in keys { if k.isLetter { st.clear() } else { st.other(k) } }
     check("sentence \(keys.debugDescription)", "\(st.armed)", "\(want)")
 }
+for (before, at, want) in [("", 0, true), ("đi. ", 4, true), ("đi.  ", 5, true), ("đi.", 3, false), ("e.g", 3, false), ("đi.\n", 4, false), ("abc ", 4, false)] {
+    check("starts \(before.debugDescription)", "\(SentenceStart.starts(after: before, at: at))", "\(want)")
+}
 check("typed Vieetj", typed("Vieetj", .telex), "Việt")
 check("typed Ddi", typed("Ddi", .telex), "Đi")
 // Corpus run (slow): `./t corpus` — whole-dictionary checks instead of hand-picked words.

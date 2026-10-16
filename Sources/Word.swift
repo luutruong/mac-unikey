@@ -62,6 +62,13 @@ struct SentenceStart {
         else { clear() }
     }
     mutating func clear() { afterStop = false; armed = false } // letter typed, Delete, click, shortcut
+    /// Text right before the cursor starts a sentence: start of the document, or . ! ? then space(s). Not after Return.
+    /// Preferred over the key history when the app tells us its text (survives Delete and clicks).
+    static func starts(after before: String, at location: Int) -> Bool {
+        if location == 0 { return true }
+        let t = before.reversed().drop { $0 == " " }
+        return t.count < before.count && t.first.map { ".!?".contains($0) } == true
+    }
 }
 
 /// macOS's built-in spelling dictionaries, cached per string (lookups run on every keystroke).
