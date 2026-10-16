@@ -227,7 +227,8 @@ class InputController: IMKInputController {
         word.type(c, method)
         // Direct mode, key just adds itself at the end ("trướ" + "c"): let the app type it natively.
         // Telegram spends 3-6 ms on every insertText(replacementRange:) call; a plain key costs it nothing extra.
-        if start != NSNotFound, shown == shownText.utf16.count, word.display(method) == shownText + s {
+        // Not when auto-capitalized: the app would type the key's own lowercase letter.
+        if start != NSNotFound, s == event.characters, shown == shownText.utf16.count, word.display(method) == shownText + s {
             shownText += s
             shown = shownText.utf16.count
             return false
