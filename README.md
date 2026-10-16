@@ -56,6 +56,8 @@ swiftc -O Sources/Engine.swift Sources/Word.swift Tests/main.swift -o build/t &&
 
 Thêm `corpus` (`./build/t corpus`) để kiểm tra trên toàn bộ từ điển: mọi âm tiết tiếng Việt (Telex/VNI) và độ nhảy chữ khi gõ. Chạy khá lâu.
 
+Thêm `log` (`./build/t log`) để gõ lại các từ trong `typing.log` bằng luật hiện tại và liệt kê những từ giờ ra kết quả khác lúc ghi log.
+
 ## Cấu trúc
 
 | File | Vai trò |

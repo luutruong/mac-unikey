@@ -77,6 +77,13 @@ func withoutUndoKey(_ raw: String, method: Method) -> String? {
     return String(keys)
 }
 
+/// A vowel key came after the tone key ("jira", "chore", "hofa"): at word end that is only
+/// trusted for a dictionary word. Vietnamese is typed tone last or right after its vowel.
+func toneBeforeVowel(_ raw: String, method: Method) -> Bool {
+    guard let t = parse(raw, method).toneAt else { return false }
+    return raw.dropFirst(t + 1).contains { "aeiouy".contains($0.lowercased()) }
+}
+
 /// The word can no longer become Vietnamese: it is shown and committed exactly as typed.
 func isLiteral(_ raw: String, method: Method) -> Bool {
     let p = parse(raw, method)
@@ -121,12 +128,13 @@ func keys(for text: String, method: Method) -> String {
     return out
 }
 
-private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int, undoAt: Int?) {
+private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int, undoAt: Int?, toneAt: Int?) {
     var w: [Ch] = []
     var tone = 0 // 1 sắc, 2 huyền, 3 hỏi, 4 ngã, 5 nặng
     var literal = false // after a double-key undo the rest of the word is typed as-is (UniKey)
     var prev: (key: Character, applied: Bool)? // undo only when the key repeats right away ("ss")
     var undoAt: Int?  // index in raw of the key that cancelled a mark
+    var toneAt: Int?  // index in raw of the key that set the tone
     var idx = -1
 
     for key in raw {
@@ -140,11 +148,11 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int, undo
         let vi = vowelIndices(w)
         // A transform that breaks the syllable while the plain letter wouldn't is typed as the plain
         // letter instead (UniKey): "khoeo" keeps its o, not "khôe".
-        let before = (w, tone)
+        let before = (w, tone, toneAt)
         defer {
             if applied, !isSyllable(w, tone: tone, prefix: true),
                isSyllable(before.0 + [lit], tone: before.1, prefix: true) {
-                (w, tone) = before; w.append(lit); applied = false
+                (w, tone, toneAt) = before; w.append(lit); applied = false
             }
         }
 
@@ -171,9 +179,9 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int, undo
         case .tone(let t):
             if vi.isEmpty || (t == 0 && tone == 0) { w.append(lit) }
             else if t == tone && t != 0 {
-                if canUndo { tone = 0; literal = true; undoAt = undoAt ?? idx }
+                if canUndo { tone = 0; toneAt = nil; literal = true; undoAt = undoAt ?? idx }
                 w.append(lit)
-            } else { tone = t; applied = true }
+            } else { tone = t; toneAt = t == 0 ? nil : idx; applied = true }
         case .hat(let targets):
             if let i = vi.last(where: { targets.contains(w[$0].base) }) { toggle(i, .hat) } else { w.append(lit) }
         case .breve:
@@ -200,11 +208,11 @@ private func parse(_ raw: String, _ method: Method) -> (w: [Ch], tone: Int, undo
     // "ươ" never ends a Vietnamese syllable: word-final it is "uơ" (thuở, huơ).
     if w.count >= 2, w[w.count - 1].base == "o", w[w.count - 1].mark == .horn,
        w[w.count - 2].base == "u", w[w.count - 2].mark == .horn { w[w.count - 2].mark = .none }
-    return (w, tone, undoAt)
+    return (w, tone, undoAt, toneAt)
 }
 
-private func render(_ p: (w: [Ch], tone: Int, undoAt: Int?)) -> String {
-    let (w, tone, _) = p
+private func render(_ p: (w: [Ch], tone: Int, undoAt: Int?, toneAt: Int?)) -> String {
+    let (w, tone, _, _) = p
     // Tone placement (old style, UniKey default).
     var pos: Int?
     let vi = vowelIndices(w)
@@ -260,9 +268,11 @@ private func isSyllable(_ w: [Ch], tone: Int, prefix: Bool = false) -> Bool {
             }
             continue
         }
-        if fin.isEmpty ? (closedVowels.contains(v) || openVowels.contains(v))
+        // A complete syllable never ends in ă/â ("raw" not "ră"), and c ch p t take only sắc or nặng
+        // ("data" not "dât", "deep" not "dêp"); while typing these are fine, the tone may still come.
+        if fin.isEmpty ? (closedVowels.contains(v) || openVowels.contains(v)) && !v.hasSuffix("ă") && !v.hasSuffix("â")
                        : (closedVowels.contains(v) && finals.contains(fin)
-                          && (!["c", "ch", "p", "t"].contains(fin) || tone == 0 || tone == 1 || tone == 5)) {
+                          && (!["c", "ch", "p", "t"].contains(fin) || tone == 1 || tone == 5)) {
             return true
         }
     }

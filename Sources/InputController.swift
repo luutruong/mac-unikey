@@ -113,8 +113,9 @@ private let typingLogFile: FileHandle? = {
     _ = try? h?.seekToEnd()
     return h
 }()
+private let logDate = ISO8601DateFormatter()
 private func logTyping(_ fields: String...) {
-    let line = ([ISO8601DateFormatter().string(from: Date())] + fields).joined(separator: "\t") + "\n"
+    let line = ([logDate.string(from: Date())] + fields).joined(separator: "\t") + "\n"
     typingLogFile?.write(Data(line.utf8))
 }
 #else

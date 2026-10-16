@@ -22,6 +22,11 @@ let cases: [(String, Method, String)] = [
     ("fair", .telex, "fair"), ("zoo", .telex, "zô"), ("zoom", .telex, "zôm"), ("jeans", .telex, "jeans"), ("fix", .telex, "fix"),
     ("xof", .telex, "xò"), ("Xof", .telex, "Xò"), ("ddeechj", .telex, "đệch"), ("xo2", .vni, "xò"), ("tauj", .telex, "tạu"),
     ("Ohf", .telex, "Òh"), ("ahf", .telex, "àh"), ("uwh", .telex, "ưh"), ("oh", .telex, "oh"), ("ohm", .telex, "ohm"), ("each", .telex, "each"),
+    // no Vietnamese syllable ends in ă/â, or in c ch p t without sắc/nặng
+    ("data", .telex, "data"), ("deep", .telex, "deep"), ("loop", .telex, "loop"), ("raw", .telex, "raw"), ("aa", .telex, "aa"),
+    ("dataa", .telex, "data"), ("vieet", .telex, "vieet"), ("a8", .vni, "a8"),
+    // a vowel after the tone key: dictionary words only
+    ("jira", .telex, "jira"), ("chore", .telex, "chore"), ("param", .telex, "param"), ("hofa", .telex, "hòa"), ("khore", .telex, "khỏe"), ("cura", .telex, "của"),
 ]
 
 // While typing (compose): transforms shown even if the word isn't Vietnamese yet
@@ -73,7 +78,7 @@ func typedEdit(_ first: String, _ n: Int, _ then: String, _ m: Method) -> String
 }
 check("TYooi⌫4+ooi", typedEdit("TYooi", 4, "ooi", .telex), "Tôi")
 check("messa⌫1", typedEdit("messa", 1, "", .telex), "mes")
-for (text, more, want) in [("co", "nf", "còn"), ("ch", "ayj", "chạy"), ("việ", "t", "việt"), ("timeo", "ut", "timeout"), ("cros", "s", "cross"), ("proces", "s", "process")] {
+for (text, more, want) in [("co", "nf", "còn"), ("ch", "ayj", "chạy"), ("việ", "t", "việt"), ("timeo", "ut", "timeout"), ("cros", "s", "cross"), ("proces", "s", "process"), ("vieet", "j", "việt")] {
     var w = Word(resuming: text, .telex)
     for c in more { w.type(c, .telex) }
     check("resume \(text)+\(more)", w.commit(.telex), want)
@@ -89,6 +94,19 @@ for (before, at, want) in [("", 0, true), ("đi. ", 4, true), ("đi.  ", 5, true
 }
 check("typed Vieetj", typed("Vieetj", .telex), "Việt")
 check("typed Ddi", typed("Ddi", .telex), "Đi")
+// Typing log replay: `./t log` — logged words the current rules commit differently (regressions or fixes).
+if CommandLine.arguments.contains("log") {
+    let path = NSHomeDirectory() + "/Library/Application Support/MacUnikey/typing.log"
+    var changed: [String: Int] = [:]
+    for line in ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "").split(separator: "\n") {
+        let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard f.count >= 6, f[1] == "word", let m = Method(rawValue: f[3]) else { continue }
+        let now = typed(f[4], m)
+        if now != f[5] { changed["\(f[4]): \(f[5]) -> \(now)", default: 0] += 1 }
+    }
+    print("Typing log: \(changed.values.reduce(0, +)) words now commit differently")
+    for (k, n) in changed.sorted(by: { ($0.value, $1.key) > ($1.value, $0.key) }) { print("  \(n)x", k) }
+}
 // Corpus run (slow): `./t corpus` — whole-dictionary checks instead of hand-picked words.
 if CommandLine.arguments.contains("corpus") {
     // Vietnamese: every syllable the macOS Vietnamese dictionary accepts, typed in Telex and VNI,

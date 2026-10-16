@@ -13,8 +13,10 @@ struct Word {
     /// Continue a word already in the text ("co" after Delete, + "nf" -> "còn").
     init(resuming text: String, _ m: Method) {
         let k = keys(for: text, method: m)
-        if isLiteral(k, method: m) || compose(k, method: m) == text { (raw, literal) = (k, isLiteral(k, method: m)) }
-        else { (raw, literal) = (text, true) }
+        // Also when `text` is what these keys commit ("vieet" + "j" -> "việt": a forgotten tone added after Space).
+        if isLiteral(k, method: m) || compose(k, method: m) == text || finish(k, method: m) == text {
+            (raw, literal) = (k, isLiteral(k, method: m))
+        } else { (raw, literal) = (text, true) }
         resumedLiteral = literal
     }
 
@@ -29,13 +31,14 @@ struct Word {
     func commit(_ m: Method) -> String { decide(literal ? raw : finish(raw, method: m), m, final: true) }
 
     /// UniKey rules, no English guessing:
-    /// 1. at word end: V is a valid syllable (xò, đệch, tét); while typing: V is a dictionary word
+    /// 1. at word end: V is a valid syllable (xò, đệch, tét), but a dictionary word if a vowel key came after
+    ///    the tone key (jira, chore stay; hofa -> hòa); while typing: V is a dictionary word
     /// 2. a mark was cancelled by a double key  -> keys minus that key (ass -> as, thiss -> this, ww -> w)
     /// 3. while typing: V; at word end: keys as typed (json, book)
     private func decide(_ v: String, _ m: Method, final: Bool) -> String {
         if let a = abbreviation(m) { return a }
         // At word end v is finish(raw): already raw unless the keys form a valid syllable.
-        if v != raw && final { return v }
+        if v != raw && final && (!toneBeforeVowel(raw, method: m) || Dictionaries.isVietnamese(v)) { return v }
         // The dictionary only decides between V and an undone mark: skip the lookup on most keys (Telegram waits on us).
         guard !resumedLiteral, let u = withoutUndoKey(raw, method: m) else { return final ? raw : v }
         return v != raw && !final && Dictionaries.isVietnamese(v) ? v : u
