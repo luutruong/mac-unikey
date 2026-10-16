@@ -81,6 +81,12 @@ private func showHUD(_ text: String, near client: IMKTextInput) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { if t == hudToken { panel.orderOut(nil) } }
 }
 
+// Auto-capitalize only in chat apps: elsewhere (code, search boxes, terminals) a capital is unwanted.
+private let capitalizeApps: Set<String> = [
+    "ru.keepcoder.Telegram", "com.tdesktop.Telegram", // Telegram, Telegram Desktop
+    "net.whatsapp.WhatsApp", "desktop.WhatsApp", // WhatsApp, old Electron WhatsApp
+]
+
 private var loggedFontApps = Set<String>() // log the marked-text font once per app (debugging)
 private var loggedModeApps = Set<String>()
 // Apps whose selectedRange doesn't follow typing (Sublime Text): direct mode would drop every
@@ -221,7 +227,7 @@ class InputController: IMKInputController {
             if let c = event.characters?.first, event.characters?.count == 1 { sentence.other(c) } else { sentence.clear() }
             commit(client); return false // space, punctuation, enter, arrows… end the word
         }
-        if word.isEmpty && autoCapitalize && sentenceStart(client) { s = s.uppercased(); c = s.first! }
+        if word.isEmpty && autoCapitalize && capitalizeApps.contains(client.bundleIdentifier() ?? "") && sentenceStart(client) { s = s.uppercased(); c = s.first! }
         sentence.clear()
         if word.isEmpty { begin(client, resume: resume) }
         word.type(c, method)
