@@ -74,6 +74,23 @@ struct SentenceStart {
     }
 }
 
+/// Shorthand expanded at word end ("đc" -> "được"), edited in the Bảng gõ tắt window.
+/// Keys are lowercase committed text, so "ddc" (Telex) and "d9c" (VNI) both reach "đc".
+enum Macros {
+    static var table: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: "macros") as? [String: String]
+              ?? ["đc": "được", "ko": "không", "ng": "người", "vs": "với", "bt": "bình thường"] }
+        set { UserDefaults.standard.set(newValue, forKey: "macros") }
+    }
+
+    /// The expansion of `word`, following its case: "Đc" -> "Được", "ĐC" -> "ĐƯỢC".
+    static func expand(_ word: String, _ table: [String: String]) -> String? {
+        guard let v = table[word.lowercased()], let first = word.first else { return nil }
+        if word.count > 1 && word == word.uppercased() { return v.uppercased() }
+        return first.isUppercase ? v.prefix(1).uppercased() + v.dropFirst() : v
+    }
+}
+
 /// macOS's built-in spelling dictionaries, cached per string (lookups run on every keystroke).
 enum Dictionaries {
     private static var cache: [String: Bool] = [:]

@@ -68,6 +68,12 @@ func typed(_ input: String, _ m: Method) -> String {
     return w.commit(m)
 }
 for (input, m, want) in cases { check("typed \(input)", typed(input, m), want) }
+// Gõ tắt: looked up by the committed word, following its case.
+let macros = ["đc": "được", "tks": "cảm ơn nhiều"]
+for (input, want) in [("ddc", "được"), ("DDc", "Được"), ("DDC", "ĐƯỢC"), ("tks", "cảm ơn nhiều"), ("Tks", "Cảm ơn nhiều"), ("book", "book")] {
+    let w = typed(input, .telex)
+    check("macro \(input)", Macros.expand(w, macros) ?? w, want)
+}
 // Typo, Delete back past it, type on ("TYooi" ⌫⌫⌫⌫ "ooi"), and continuing a word left in the text.
 func typedEdit(_ first: String, _ n: Int, _ then: String, _ m: Method) -> String {
     var w = Word()

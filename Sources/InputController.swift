@@ -144,6 +144,11 @@ class InputController: IMKInputController {
         set { UserDefaults.standard.set(newValue, forKey: "autoCapitalize") }
     }
 
+    private var macrosOn: Bool {
+        get { UserDefaults.standard.object(forKey: "macrosOn") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "macrosOn") }
+    }
+
     // V/E toggle (UniKey Ctrl+Shift), shared by all apps.
     private var vietnamese: Bool {
         get { UserDefaults.standard.object(forKey: "vietnamese") as? Bool ?? true }
@@ -344,8 +349,9 @@ class InputController: IMKInputController {
     // Word end: insert the decided text (Vietnamese, English, or keys as typed).
     private func commit(_ client: IMKTextInput) {
         guard !word.isEmpty else { return }
-        let final = word.commit(method)
+        var final = word.commit(method)
         logTyping("word", client.bundleIdentifier() ?? "?", method.rawValue, word.raw, final)
+        if macrosOn { final = Macros.expand(final, Macros.table) ?? final }
         if let id = client.bundleIdentifier() { cursorMisses[id] = 0 } // only back-to-back misses count
         if start == NSNotFound {
             client.insertText(final, replacementRange: noRange)
@@ -380,6 +386,10 @@ class InputController: IMKInputController {
         let cap = NSMenuItem(title: "Viết hoa đầu câu", action: #selector(toggleAutoCapitalize), keyEquivalent: "")
         cap.state = autoCapitalize ? .on : .off
         m.addItem(cap)
+        let mac = NSMenuItem(title: "Gõ tắt", action: #selector(toggleMacros), keyEquivalent: "")
+        mac.state = macrosOn ? .on : .off
+        m.addItem(mac)
+        m.addItem(NSMenuItem(title: "Bảng gõ tắt…", action: #selector(showMacros), keyEquivalent: ""))
         m.addItem(.separator())
         for (title, sel, meth) in [("Telex", #selector(selectTelex), Method.telex), ("VNI", #selector(selectVNI), .vni)] {
             let item = NSMenuItem(title: title, action: sel, keyEquivalent: "")
@@ -393,6 +403,8 @@ class InputController: IMKInputController {
         if let c = client() { toggle(c) } else { vietnamese.toggle() }
     }
     @objc func toggleAutoCapitalize(_ sender: Any?) { autoCapitalize.toggle() }
+    @objc func toggleMacros(_ sender: Any?) { macrosOn.toggle() }
+    @objc func showMacros(_ sender: Any?) { MacrosWindow.show() }
     @objc func selectTelex(_ sender: Any?) { method = .telex }
     @objc func selectVNI(_ sender: Any?) { method = .vni }
 }

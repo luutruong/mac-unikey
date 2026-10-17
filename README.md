@@ -7,6 +7,7 @@ Bộ gõ tiếng Việt cho macOS (InputMethodKit), gõ Telex hoặc VNI theo ki
 - **Telex / VNI**: chọn trong menu của input source trên menu bar.
 - **Luật UniKey**: từ không phải tiếng Việt (`book`, `json`) được giữ như đã gõ; muốn bỏ dấu thì gõ lặp phím (`thiss` → `this`, `ass` → `as`, `ww` → `w`). Bộ gõ tra từ điển tiếng Việt có sẵn trên macOS.
 - **Chuyển Việt/Anh bằng Ctrl+Shift** (nhấn rồi thả), có nhãn nhỏ hiện dưới con trỏ.
+- **Gõ tắt**: gõ từ tắt rồi Space/dấu câu để thay bằng từ đầy đủ (`đc` → `được`, `Đc` → `Được`). Thêm/sửa/xoá trong menu › Bảng gõ tắt…, bật/tắt bằng mục Gõ tắt.
 - **Teen code**: `zij` → `zị`, `jif` → `jì`, `ohf` → `òh`.
 - **Gõ ổn định trong app native** (Telegram, TextEdit…): sửa thẳng vào văn bản, không dùng marked text nên dòng chữ không bị nhảy. App Chromium/Electron vẫn dùng marked text.
 
@@ -65,6 +66,7 @@ Thêm `log` (`./build/t log`) để gõ lại các từ trong `typing.log` bằn
 | `Sources/Engine.swift` | Ghép phím thô của một từ thành chữ Unicode (Telex/VNI) |
 | `Sources/Word.swift` | Trạng thái một từ: chọn chữ hiển thị và chữ chốt, từ điển |
 | `Sources/InputController.swift` | Controller của IMK: xử lý phím, Delete, Return, bật/tắt V/E, menu |
+| `Sources/MacrosWindow.swift` | Cửa sổ Bảng gõ tắt |
 | `Sources/main.swift` | Khởi động IMK server |
 | `Tests/main.swift` | Test các case và test corpus |
 | `build.sh` | Build, tạo icon, ký và cài đặt |
