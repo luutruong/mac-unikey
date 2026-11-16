@@ -81,6 +81,31 @@ private func showHUD(_ text: String, near client: IMKTextInput) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { if t == hudToken { panel.orderOut(nil) } }
 }
 
+// V/E toggle (UniKey Ctrl+Shift), shared by all apps and kept across restarts.
+var vietnamese: Bool {
+    get { UserDefaults.standard.object(forKey: "vietnamese") as? Bool ?? true }
+    set { UserDefaults.standard.set(newValue, forKey: "vietnamese"); showModeBadge() }
+}
+
+// "E" in the menu bar while English is on: our own icon stays "Vi" (no input modes), and English
+// left on by a stray Ctrl+Shift otherwise looks like a broken input method. Click -> back to Vietnamese.
+private var modeBadge: NSStatusItem?
+private final class BadgeTarget: NSObject { @objc func click() { vietnamese = true } }
+private let badgeTarget = BadgeTarget()
+func showModeBadge() {
+    if vietnamese {
+        if let b = modeBadge { NSStatusBar.system.removeStatusItem(b) }
+        modeBadge = nil
+    } else if modeBadge == nil {
+        let b = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        b.button?.image = NSImage(systemSymbolName: "e.square.fill", accessibilityDescription: "English")
+        b.button?.toolTip = "Đang gõ tiếng Anh. Bấm (hoặc Ctrl+Shift) để gõ tiếng Việt"
+        b.button?.target = badgeTarget
+        b.button?.action = #selector(BadgeTarget.click)
+        modeBadge = b
+    }
+}
+
 // Auto-capitalize only in chat apps: elsewhere (code, search boxes, terminals) a capital is unwanted.
 private let capitalizeApps: Set<String> = [
     "ru.keepcoder.Telegram", "com.tdesktop.Telegram", // Telegram, Telegram Desktop
@@ -147,12 +172,6 @@ class InputController: IMKInputController {
     private var macrosOn: Bool {
         get { UserDefaults.standard.object(forKey: "macrosOn") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "macrosOn") }
-    }
-
-    // V/E toggle (UniKey Ctrl+Shift), shared by all apps.
-    private var vietnamese: Bool {
-        get { UserDefaults.standard.object(forKey: "vietnamese") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "vietnamese") }
     }
 
     private var method: Method {
