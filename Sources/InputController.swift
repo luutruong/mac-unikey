@@ -221,14 +221,18 @@ class InputController: IMKInputController {
         if event.keyCode == 36 || event.keyCode == 76, word.isEmpty { // Return with no word: passes through
             log.notice("Return passthrough in \(client.bundleIdentifier() ?? "?", privacy: .public)")
         }
-        if (event.keyCode == 36 || event.keyCode == 76), !word.isEmpty, start == NSNotFound, // Return on marked text
-           let id = client.bundleIdentifier() {
-            commit(client)
+        // Return on marked text, or in direct mode when committing rewrites the word (gõ tắt "ko" -> "không"):
+        // Telegram applies that edit after sending, leaving "hông" in the emptied input. Re-post Return after the edit.
+        if (event.keyCode == 36 || event.keyCode == 76), !word.isEmpty, let id = client.bundleIdentifier() {
+            sentence.clear() // not after Return, see SentenceStart
+            let marked = start == NSNotFound
+            let changed = commit(client)
+            guard marked || changed else { return false }
             let posted = repost(event, to: id)
-            log.notice("Return in \(id, privacy: .public): reposted=\(posted, privacy: .public) access=\(CGPreflightPostEventAccess(), privacy: .public)")
+            log.notice("Return in \(id, privacy: .public): marked=\(marked, privacy: .public) reposted=\(posted, privacy: .public) access=\(CGPreflightPostEventAccess(), privacy: .public)")
             if posted { return true }
             // No permission: Chromium swallows it (a 2nd Return sends); native apps get it now.
-            return isChromium(id)
+            return marked && isChromium(id)
         }
         if event.keyCode == 51 { // backspace
             sentence.clear()
@@ -366,18 +370,22 @@ class InputController: IMKInputController {
     }
 
     // Word end: insert the decided text (Vietnamese, English, or keys as typed).
-    private func commit(_ client: IMKTextInput) {
-        guard !word.isEmpty else { return }
+    /// True when it wrote to the document (always in marked mode; in direct mode only if the text changed).
+    @discardableResult
+    private func commit(_ client: IMKTextInput) -> Bool {
+        guard !word.isEmpty else { return false }
         var final = word.commit(method)
         logTyping("word", client.bundleIdentifier() ?? "?", method.rawValue, word.raw, final)
         if macrosOn { final = Macros.expand(final, Macros.table) ?? final }
         if let id = client.bundleIdentifier() { cursorMisses[id] = 0 } // only back-to-back misses count
+        let wrote = start == NSNotFound || final != shownText
         if start == NSNotFound {
             client.insertText(final, replacementRange: noRange)
         } else {
             replaceShown(with: final, client)
         }
         reset()
+        return wrote
     }
 
     private func toggle(_ client: IMKTextInput) {
