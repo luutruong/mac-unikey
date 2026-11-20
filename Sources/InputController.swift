@@ -48,64 +48,6 @@ private func repost(_ event: NSEvent, to bundleID: String) -> Bool {
     return true
 }
 
-// Brief "Tiếng Việt" / "English" label under the cursor when toggling V/E: the menu-bar icon of
-// an input method without modes can't change, so this is the only state feedback.
-private var hud: NSPanel?
-private var hudToken = 0
-private func showHUD(_ text: String, near client: IMKTextInput) {
-    var line = NSRect.zero
-    _ = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &line)
-    let label = NSTextField(labelWithString: text)
-    label.font = .systemFont(ofSize: 13, weight: .semibold)
-    label.textColor = .white
-    label.sizeToFit()
-    let size = NSSize(width: label.frame.width + 20, height: label.frame.height + 10)
-    let bg = NSView(frame: NSRect(origin: .zero, size: size))
-    bg.wantsLayer = true
-    bg.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.75).cgColor
-    bg.layer?.cornerRadius = 6
-    label.frame.origin = NSPoint(x: 10, y: 5)
-    bg.addSubview(label)
-    let panel = hud ?? NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-    hud = panel
-    panel.level = .popUpMenu
-    panel.backgroundColor = .clear
-    panel.isOpaque = false
-    panel.ignoresMouseEvents = true
-    panel.contentView = bg
-    let origin = line == .zero ? NSEvent.mouseLocation : NSPoint(x: line.minX, y: line.minY - size.height - 4)
-    panel.setFrame(NSRect(origin: origin, size: size), display: true)
-    panel.orderFrontRegardless()
-    hudToken += 1
-    let t = hudToken
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { if t == hudToken { panel.orderOut(nil) } }
-}
-
-// V/E toggle (UniKey Ctrl+Shift), shared by all apps and kept across restarts.
-var vietnamese: Bool {
-    get { UserDefaults.standard.object(forKey: "vietnamese") as? Bool ?? true }
-    set { UserDefaults.standard.set(newValue, forKey: "vietnamese"); showModeBadge() }
-}
-
-// "E" in the menu bar while English is on: our own icon stays "Vi" (no input modes), and English
-// left on by a stray Ctrl+Shift otherwise looks like a broken input method. Click -> back to Vietnamese.
-private var modeBadge: NSStatusItem?
-private final class BadgeTarget: NSObject { @objc func click() { vietnamese = true } }
-private let badgeTarget = BadgeTarget()
-func showModeBadge() {
-    if vietnamese {
-        if let b = modeBadge { NSStatusBar.system.removeStatusItem(b) }
-        modeBadge = nil
-    } else if modeBadge == nil {
-        let b = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        b.button?.image = NSImage(systemSymbolName: "e.square.fill", accessibilityDescription: "English")
-        b.button?.toolTip = "Đang gõ tiếng Anh. Bấm (hoặc Ctrl+Shift) để gõ tiếng Việt"
-        b.button?.target = badgeTarget
-        b.button?.action = #selector(BadgeTarget.click)
-        modeBadge = b
-    }
-}
-
 // Auto-capitalize only in chat apps: elsewhere (code, search boxes, terminals) a capital is unwanted.
 private let capitalizeApps: Set<String> = [
     "ru.keepcoder.Telegram", "com.tdesktop.Telegram", // Telegram, Telegram Desktop
@@ -160,7 +102,6 @@ class InputController: IMKInputController {
     private var shownText = "" // what direct mode last put in the document
     private var markedReplace: NSRange? // marked mode, resumed word: the letters the first marked text replaces
     private let noRange = NSRange(location: NSNotFound, length: 0)
-    private var chordArmed = false // Ctrl+Shift pressed with no other key yet
     private var afterDelete = false // last key was a Delete the app handled: the next word may continue the text
     private var sentence = SentenceStart()
 
@@ -180,21 +121,12 @@ class InputController: IMKInputController {
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask([.keyDown, .flagsChanged]).rawValue)
+        Int(NSEvent.EventTypeMask.keyDown.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let client = sender as? IMKTextInput else { return false }
-        if event.type == .flagsChanged { // Ctrl+Shift pressed and released alone -> toggle V/E
-            let f = event.modifierFlags.intersection([.shift, .control, .option, .command])
-            if f == [.control, .shift] { chordArmed = true }
-            else if f.isEmpty { if chordArmed { toggle(client) }; chordArmed = false }
-            else if !f.isSubset(of: [.control, .shift]) { chordArmed = false }
-            return false
-        }
         guard event.type == .keyDown else { return false }
-        chordArmed = false
-        guard vietnamese else { return false }
         let resume = afterDelete
         afterDelete = false
         // Direct mode: the cursor isn't where we left the word. If the word is still right before it,
@@ -388,12 +320,6 @@ class InputController: IMKInputController {
         return wrote
     }
 
-    private func toggle(_ client: IMKTextInput) {
-        commit(client)
-        vietnamese.toggle()
-        showHUD(vietnamese ? "Tiếng Việt" : "English", near: client)
-    }
-
     // Direct mode needs no commit: the word is already in the text. JetBrains IDEs ask after every
     // key, which would end each word at its first letter; a real cursor move resets it in handle().
     override func commitComposition(_ sender: Any!) {
@@ -407,9 +333,6 @@ class InputController: IMKInputController {
 
     override func menu() -> NSMenu! {
         let m = NSMenu()
-        let v = NSMenuItem(title: "Tiếng Việt (⌃⇧)", action: #selector(toggleVietnamese), keyEquivalent: "")
-        v.state = vietnamese ? .on : .off
-        m.addItem(v)
         let cap = NSMenuItem(title: "Viết hoa đầu câu", action: #selector(toggleAutoCapitalize), keyEquivalent: "")
         cap.state = autoCapitalize ? .on : .off
         m.addItem(cap)
@@ -426,9 +349,6 @@ class InputController: IMKInputController {
         return m
     }
 
-    @objc func toggleVietnamese(_ sender: Any?) {
-        if let c = client() { toggle(c) } else { vietnamese.toggle() }
-    }
     @objc func toggleAutoCapitalize(_ sender: Any?) { autoCapitalize.toggle() }
     @objc func toggleMacros(_ sender: Any?) { macrosOn.toggle() }
     @objc func showMacros(_ sender: Any?) { MacrosWindow.show() }
